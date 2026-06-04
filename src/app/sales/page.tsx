@@ -6,7 +6,7 @@ import { fetchDashboardData } from "../actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Search, Receipt, TrendingUp, DollarSign, Printer, MoreHorizontal } from "lucide-react";
+import { Plus, Download, Search, Receipt, TrendingUp, DollarSign, Printer, MoreHorizontal, User, Users, Package } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
@@ -320,7 +320,7 @@ export default function SalesPage() {
               </DialogHeader>
               <div className="space-y-6 py-6">
                 <div className="space-y-2">
-                  <Label>Customer Type</Label>
+                  <Label className="flex items-center text-base"><Users className="h-4 w-4 text-indigo-600 mr-2" /> Customer Type</Label>
                   <Select value={customerType} onValueChange={(val) => {
                     if (!val) return;
                     setCustomerType(val);
@@ -337,7 +337,7 @@ export default function SalesPage() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label>Customer Name</Label>
+                  <Label className="flex items-center text-base"><User className="h-4 w-4 text-indigo-600 mr-2" /> Customer Name</Label>
                   <Select value={selectedCustomer} onValueChange={(val) => {
                     if (!val) return;
                     setSelectedCustomer(val);
@@ -355,7 +355,7 @@ export default function SalesPage() {
                 </div>
                 
                 <div className="border-t pt-4 space-y-4">
-                  <h4 className="font-medium text-sm">Add Products</h4>
+                  <h4 className="font-medium text-base flex items-center"><Package className="h-4 w-4 text-indigo-600 mr-2" /> Add Products</h4>
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <Select value={selectedProduct} onValueChange={(val) => val && setSelectedProduct(val)}>

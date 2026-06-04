@@ -5,7 +5,7 @@ import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Filter, ShoppingBag, Truck, DollarSign, MoreHorizontal, Search } from "lucide-react";
+import { Plus, Download, Filter, ShoppingBag, Truck, DollarSign, MoreHorizontal, Search, Users, Package } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -323,7 +323,7 @@ export default function PurchasesPage() {
               </DialogHeader>
               <div className="space-y-6 py-6">
                 <div className="space-y-2">
-                  <Label>Supplier</Label>
+                  <Label className="flex items-center text-base"><Users className="h-4 w-4 text-indigo-600 mr-2" /> Supplier</Label>
                   <Select value={selectedSupplier} onValueChange={(val) => val && setSelectedSupplier(val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supplier..." />
@@ -342,7 +342,7 @@ export default function PurchasesPage() {
                 </div>
                 
                 <div className="border-t pt-4 space-y-4">
-                  <h4 className="font-medium text-sm">Add Items</h4>
+                  <h4 className="font-medium text-base flex items-center"><Package className="h-4 w-4 text-indigo-600 mr-2" /> Add Items</h4>
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <Select value={selectedProduct} onValueChange={(val) => val && handleProductSelect(val)}>
