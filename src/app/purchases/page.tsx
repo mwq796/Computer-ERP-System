@@ -324,7 +324,7 @@ export default function PurchasesPage() {
               <div className="space-y-6 py-6">
                 <div className="space-y-2">
                   <Label>Supplier</Label>
-                  <Select value={selectedSupplier} onValueChange={setSelectedSupplier}>
+                  <Select value={selectedSupplier} onValueChange={(val) => val && setSelectedSupplier(val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supplier..." />
                     </SelectTrigger>
@@ -345,7 +345,7 @@ export default function PurchasesPage() {
                   <h4 className="font-medium text-sm">Add Items</h4>
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <Select value={selectedProduct} onValueChange={handleProductSelect}>
+                      <Select value={selectedProduct} onValueChange={(val) => val && handleProductSelect(val)}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select product..." />
                         </SelectTrigger>
@@ -416,7 +416,7 @@ export default function PurchasesPage() {
                 
                 <div className="space-y-2">
                   <Label>Payment Status</Label>
-                  <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                  <Select value={paymentStatus} onValueChange={(val) => val && setPaymentStatus(val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
@@ -528,7 +528,7 @@ export default function PurchasesPage() {
                   <TableCell>{formatDate(purchase.date)}</TableCell>
                   <TableCell className="font-medium">{purchase.supplierName}</TableCell>
                   <TableCell className="text-center text-slate-500">
-                    {purchase.items.reduce((sum, item) => sum + item.quantity, 0)} units
+                    {purchase.items.reduce((sum: number, item: any) => sum + item.quantity, 0)} units
                   </TableCell>
                   <TableCell className="text-right font-bold">
                     {formatCurrency(purchase.totalAmount)}
@@ -577,7 +577,7 @@ export default function PurchasesPage() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {purchase.items.map((item, idx) => (
+                              {purchase.items.map((item: any, idx: number) => (
                                 <TableRow key={idx}>
                                   <TableCell>{item.productName}</TableCell>
                                   <TableCell className="text-center">{item.quantity}</TableCell>

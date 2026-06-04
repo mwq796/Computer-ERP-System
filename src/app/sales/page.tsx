@@ -322,6 +322,7 @@ export default function SalesPage() {
                 <div className="space-y-2">
                   <Label>Customer Type</Label>
                   <Select value={customerType} onValueChange={(val) => {
+                    if (!val) return;
                     setCustomerType(val);
                     if (val === "walkin") setSelectedCustomer("");
                   }}>
@@ -338,8 +339,9 @@ export default function SalesPage() {
                 <div className="space-y-2">
                   <Label>Customer Name</Label>
                   <Select value={selectedCustomer} onValueChange={(val) => {
+                    if (!val) return;
                     setSelectedCustomer(val);
-                    if (val) setCustomerType("registered");
+                    setCustomerType("registered");
                   }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select customer (optional)..." />
@@ -356,7 +358,7 @@ export default function SalesPage() {
                   <h4 className="font-medium text-sm">Add Products</h4>
                   <div className="flex gap-2">
                     <div className="flex-1">
-                      <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+                      <Select value={selectedProduct} onValueChange={(val) => val && setSelectedProduct(val)}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select product..." />
                         </SelectTrigger>
@@ -416,7 +418,7 @@ export default function SalesPage() {
                 
                 <div className="space-y-2">
                   <Label>Payment Status</Label>
-                  <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                  <Select value={paymentStatus} onValueChange={(val) => val && setPaymentStatus(val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select status" />
                     </SelectTrigger>
@@ -430,7 +432,7 @@ export default function SalesPage() {
 
                 <div className="space-y-2">
                   <Label>Payment Method</Label>
-                  <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                  <Select value={paymentMethod} onValueChange={(val) => val && setPaymentMethod(val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select method" />
                     </SelectTrigger>
@@ -638,7 +640,7 @@ export default function SalesPage() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {sale.items.map((item, idx) => (
+                              {sale.items.map((item: any, idx: number) => (
                                 <TableRow key={idx}>
                                   <TableCell>{item.productName}</TableCell>
                                   <TableCell className="text-center">{item.quantity}</TableCell>

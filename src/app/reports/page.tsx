@@ -194,11 +194,11 @@ export default function ReportsPage() {
                         fontSize={12} 
                         tickLine={false} 
                         axisLine={false} 
-                        tickFormatter={(value) => value >= 1000 || value <= -1000 ? `Rs ${(value/1000).toFixed(0)}k` : `Rs ${value}`}
+                        tickFormatter={(value: any) => value >= 1000 || value <= -1000 ? `Rs ${(value/1000).toFixed(0)}k` : `Rs ${value}`}
                       />
                       <Tooltip 
                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
-                        formatter={(value: number) => formatCurrency(value)}
+                        formatter={(value: any) => formatCurrency(value)}
                       />
                       <Legend />
                       <Line type="monotone" dataKey="sales" name="Revenue" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
@@ -230,7 +230,7 @@ export default function ReportsPage() {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(_: any, name: string, props: any) => [formatCurrency(props.payload.value), name]} />
+                      <Tooltip formatter={(_: any, name: any, props: any) => [formatCurrency(props.payload.value), name]} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>

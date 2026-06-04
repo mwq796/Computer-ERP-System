@@ -43,13 +43,18 @@ export default function PaymentsPage() {
           }
 
           if (paidAmount > 0) {
+            let partyName = 'Walk-in';
+            if (s.customers) {
+              partyName = Array.isArray(s.customers) ? s.customers[0]?.name : (s.customers as any).name;
+            }
+
             allTransactions.push({
               id: `TX-${s.id}`,
               date: s.date,
               method: s.payment_method || 'Cash',
               accountName: 'Sales Revenue',
               accountNumber: '-',
-              partyName: s.customers?.name || 'Walk-in',
+              partyName: partyName || 'Walk-in',
               type: 'Received',
               amount: paidAmount,
               reference: s.id
@@ -69,13 +74,18 @@ export default function PaymentsPage() {
           }
 
           if (paidAmount > 0) {
+            let partyName = 'Supplier';
+            if (p.suppliers) {
+              partyName = Array.isArray(p.suppliers) ? p.suppliers[0]?.name : (p.suppliers as any).name;
+            }
+
             allTransactions.push({
               id: `TX-${p.id}`,
               date: p.date,
               method: 'Cash', // Defaulting to cash since purchase table lacks payment_method currently
               accountName: 'Purchase Expense',
               accountNumber: '-',
-              partyName: p.suppliers?.name || 'Supplier',
+              partyName: partyName || 'Supplier',
               type: 'Sent',
               amount: paidAmount,
               reference: p.id
@@ -205,7 +215,7 @@ export default function PaymentsPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label>Transaction Type</Label>
-                  <Select value={recordType} onValueChange={setRecordType}>
+                  <Select value={recordType} onValueChange={(val) => val && setRecordType(val)}>
                     <SelectTrigger className="bg-white border-slate-200">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
@@ -221,7 +231,7 @@ export default function PaymentsPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Payment Method</Label>
-                  <Select value={recordMethod} onValueChange={setRecordMethod}>
+                  <Select value={recordMethod} onValueChange={(val) => val && setRecordMethod(val)}>
                     <SelectTrigger className="bg-white border-slate-200">
                       <SelectValue placeholder="Select method" />
                     </SelectTrigger>

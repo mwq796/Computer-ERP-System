@@ -145,7 +145,7 @@ export default function Dashboard() {
                         fontSize={12} 
                         tickLine={false} 
                         axisLine={false} 
-                        tickFormatter={(value) => `$${value/1000}k`} 
+                        tickFormatter={(value: any) => `$${value/1000}k`} 
                       />
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <Tooltip 
@@ -320,7 +320,7 @@ export default function Dashboard() {
                         fontSize={12} 
                         tickLine={false} 
                         axisLine={false} 
-                        tickFormatter={(value: number) => `$${value/1000}k`} 
+                        tickFormatter={(value: any) => `$${value/1000}k`} 
                       />
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <Tooltip 
@@ -342,8 +342,8 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {data.recentPurchases.map((purchase) => (
-                  <div key={purchase.id} className="flex items-center justify-between border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                {data.recentPurchases.map((purchase: any) => (
+                  <div key={purchase.id} className="flex items-center justify-between border-b border-slate-100 last:border-0 pb-3 last:pb-0">
                     <div>
                       <p className="font-medium">{purchase.supplierName}</p>
                       <p className="text-xs text-muted-foreground">{purchase.id} &bull; <span suppressHydrationWarning>{new Date(purchase.date).toLocaleDateString()}</span></p>

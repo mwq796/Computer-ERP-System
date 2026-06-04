@@ -227,7 +227,7 @@ export default function ProductsPage() {
 
                   <div className="space-y-2">
                     <Label>Category</Label>
-                    <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})} required>
+                    <Select value={formData.category} onValueChange={(val) => val && setFormData({...formData, category: val})} required>
                       <SelectTrigger>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>

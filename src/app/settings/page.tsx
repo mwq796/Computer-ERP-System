@@ -228,7 +228,7 @@ export default function SettingsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>Role</Label>
-                          <Select value={userForm.role} onValueChange={(val) => setUserForm({...userForm, role: val})} required>
+                          <Select value={userForm.role} onValueChange={(val) => val && setUserForm({...userForm, role: val})} required>
                             <SelectTrigger>
                               <SelectValue placeholder="Select role" />
                             </SelectTrigger>
@@ -241,7 +241,7 @@ export default function SettingsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>Status</Label>
-                          <Select value={userForm.status} onValueChange={(val) => setUserForm({...userForm, status: val})} required>
+                          <Select value={userForm.status} onValueChange={(val) => val && setUserForm({...userForm, status: val})} required>
                             <SelectTrigger>
                               <SelectValue placeholder="Select status" />
                             </SelectTrigger>
