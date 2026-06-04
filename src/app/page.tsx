@@ -113,7 +113,7 @@ export default function Dashboard() {
               <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(data.customerReceivables)}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Pending from {data.recentSales.filter(s => s.paymentStatus !== 'Paid').length} invoices
+                  Pending from {data.recentSales.filter((s: any) => s.paymentStatus !== 'Paid').length} invoices
                 </p>
               </CardContent>
             </Card>
