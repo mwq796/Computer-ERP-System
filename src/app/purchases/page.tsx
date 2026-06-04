@@ -325,7 +325,7 @@ export default function PurchasesPage() {
                 <div className="space-y-2">
                   <Label className="flex items-center text-base"><Users className="h-4 w-4 text-indigo-600 mr-2" /> Supplier</Label>
                   <Select value={selectedSupplier} onValueChange={(val) => val && setSelectedSupplier(val)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 text-base">
                       <SelectValue placeholder="Select supplier..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -346,7 +346,7 @@ export default function PurchasesPage() {
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <Select value={selectedProduct} onValueChange={(val) => val && handleProductSelect(val)}>
-                        <SelectTrigger>
+                        <SelectTrigger className="h-11 text-base">
                           <SelectValue placeholder="Select product..." />
                         </SelectTrigger>
                         <SelectContent>

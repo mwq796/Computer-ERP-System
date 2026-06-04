@@ -326,7 +326,7 @@ export default function SalesPage() {
                     setCustomerType(val);
                     if (val === "walkin") setSelectedCustomer("");
                   }}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 text-base">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -343,7 +343,7 @@ export default function SalesPage() {
                     setSelectedCustomer(val);
                     setCustomerType("registered");
                   }}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 text-base">
                       <SelectValue placeholder="Select customer (optional)..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -359,7 +359,7 @@ export default function SalesPage() {
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <Select value={selectedProduct} onValueChange={(val) => val && setSelectedProduct(val)}>
-                        <SelectTrigger>
+                        <SelectTrigger className="h-11 text-base">
                           <SelectValue placeholder="Select product..." />
                         </SelectTrigger>
                         <SelectContent>
