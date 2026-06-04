@@ -344,7 +344,9 @@ export default function SalesPage() {
                     setCustomerType("registered");
                   }}>
                     <SelectTrigger className="h-11 text-base">
-                      <SelectValue placeholder="Select customer (optional)..." />
+                      <SelectValue placeholder="Select customer (optional)...">
+                        {customers.find(c => c.id === selectedCustomer)?.name}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {customers.map(c => (
@@ -360,7 +362,9 @@ export default function SalesPage() {
                     <div className="flex-1">
                       <Select value={selectedProduct} onValueChange={(val) => val && setSelectedProduct(val)}>
                         <SelectTrigger className="h-11 text-base">
-                          <SelectValue placeholder="Select product..." />
+                          <SelectValue placeholder="Select product...">
+                            {products.find(p => p.id === selectedProduct)?.name}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {products.map(p => (

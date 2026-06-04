@@ -326,7 +326,9 @@ export default function PurchasesPage() {
                   <Label className="flex items-center text-base"><Users className="h-4 w-4 text-indigo-600 mr-2" /> Supplier</Label>
                   <Select value={selectedSupplier} onValueChange={(val) => val && setSelectedSupplier(val)}>
                     <SelectTrigger className="h-11 text-base">
-                      <SelectValue placeholder="Select supplier..." />
+                      <SelectValue placeholder="Select supplier...">
+                        {suppliers.find(s => s.id === selectedSupplier)?.name}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {suppliers.map(s => (
@@ -347,7 +349,9 @@ export default function PurchasesPage() {
                     <div className="flex-1">
                       <Select value={selectedProduct} onValueChange={(val) => val && handleProductSelect(val)}>
                         <SelectTrigger className="h-11 text-base">
-                          <SelectValue placeholder="Select product..." />
+                          <SelectValue placeholder="Select product...">
+                            {products.find(p => p.id === selectedProduct)?.name}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {products.map(p => (
