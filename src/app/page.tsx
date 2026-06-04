@@ -205,8 +205,8 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {data.recentSales.map((sale) => (
-                  <div key={sale.id} className="flex items-center justify-between border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                {data.recentSales.map((sale: any) => (
+                  <div key={sale.id} className="flex items-center justify-between border-b border-slate-100 last:border-0 pb-3 last:pb-0">
                     <div>
                       <p className="font-medium">{sale.customerName}</p>
                       <p className="text-xs text-muted-foreground">{sale.id} &bull; <span suppressHydrationWarning>{new Date(sale.date).toLocaleDateString()}</span></p>
