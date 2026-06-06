@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { recordExpenseJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, CreditCard, Filter, ArrowUpRight, ArrowDownRight, Save } from "lucide-react";
@@ -24,99 +25,35 @@ export default function PaymentsPage() {
   const supabase = createClient();
 
   const loadData = async () => {
-      const [salesRes, purchasesRes, expensesRes] = await Promise.all([
-        supabase.from('sales').select('id, date, total_amount, payment_method, payment_status, customers(name)'),
-        supabase.from('purchases').select('id, date, total_amount, payment_status, suppliers(name)'),
-        supabase.from('expenses').select('id, date, amount, payment_method, description, category')
-      ]);
+    const { data: lines } = await supabase.from('journal_lines')
+      .select('*, accounts(name), journals(id, date, reference, description, type)')
+      .in('account_id', ['ACC-1001', 'ACC-1002']);
 
-      const allTransactions: any[] = [];
-
-      // Add Sales (Income)
-      if (salesRes.data) {
-        salesRes.data.forEach(s => {
-          let paidAmount = 0;
-          if (s.payment_status?.startsWith('Partial Paid:')) {
-            paidAmount = parseFloat(s.payment_status.split(': ')[1]) || 0;
-          } else if (s.payment_status === 'Paid') {
-            paidAmount = s.total_amount;
-          }
-
-          if (paidAmount > 0) {
-            let partyName = 'Walk-in';
-            if (s.customers) {
-              partyName = Array.isArray(s.customers) ? s.customers[0]?.name : (s.customers as any).name;
-            }
-
-            allTransactions.push({
-              id: `TX-${s.id}`,
-              date: s.date,
-              method: s.payment_method || 'Cash',
-              accountName: 'Sales Revenue',
-              accountNumber: '-',
-              partyName: partyName || 'Walk-in',
-              type: 'Received',
-              amount: paidAmount,
-              reference: s.id
-            });
-          }
+    const allTransactions: any[] = [];
+    if (lines) {
+      lines.forEach(l => {
+        const isCash = l.account_id === 'ACC-1001';
+        const isReceived = l.debit > 0;
+        const amount = l.debit > 0 ? l.debit : l.credit;
+        
+        allTransactions.push({
+          id: l.journals?.id || `TX-${Date.now()}`,
+          date: l.journals?.date || new Date().toISOString(),
+          method: isCash ? 'Cash' : 'Bank Transfer',
+          accountName: l.accounts?.name || 'Cash/Bank',
+          accountNumber: '-',
+          partyName: l.journals?.description || 'Payment',
+          type: isReceived ? 'Received' : 'Sent',
+          amount: amount,
+          reference: l.journals?.reference || '-'
         });
-      }
+      });
+    }
 
-      // Add Purchases (Outcome)
-      if (purchasesRes.data) {
-        purchasesRes.data.forEach(p => {
-          let paidAmount = 0;
-          if (p.payment_status?.startsWith('Partial Paid:')) {
-            paidAmount = parseFloat(p.payment_status.split(': ')[1]) || 0;
-          } else if (p.payment_status === 'Paid') {
-            paidAmount = p.total_amount;
-          }
-
-          if (paidAmount > 0) {
-            let partyName = 'Supplier';
-            if (p.suppliers) {
-              partyName = Array.isArray(p.suppliers) ? p.suppliers[0]?.name : (p.suppliers as any).name;
-            }
-
-            allTransactions.push({
-              id: `TX-${p.id}`,
-              date: p.date,
-              method: 'Cash', // Defaulting to cash since purchase table lacks payment_method currently
-              accountName: 'Purchase Expense',
-              accountNumber: '-',
-              partyName: partyName || 'Supplier',
-              type: 'Sent',
-              amount: paidAmount,
-              reference: p.id
-            });
-          }
-        });
-      }
-
-      // Add Expenses (Outcome and potential Income via negative values)
-      if (expensesRes.data) {
-        expensesRes.data.forEach(e => {
-          allTransactions.push({
-            id: `TX-${e.id}`,
-            date: e.date,
-            method: e.payment_method || 'Bank Transfer',
-            accountName: e.category || 'Manual Entry',
-            accountNumber: '-',
-            partyName: e.description || 'Vendor',
-            type: e.amount < 0 ? 'Received' : 'Sent',
-            amount: Math.abs(e.amount),
-            reference: e.id
-          });
-        });
-      }
-
-      // Sort by date descending
-      allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      
-      setTransactions(allTransactions);
-      setIsLoading(false);
-    };
+    allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    setTransactions(allTransactions);
+    setIsLoading(false);
+  };
 
   useEffect(() => {
     loadData();
@@ -140,6 +77,7 @@ export default function PaymentsPage() {
     }]);
 
     if (!error) {
+      await recordExpenseJournal(newId);
       setIsRecordOpen(false);
       setRecordDesc("");
       setRecordAmount("");

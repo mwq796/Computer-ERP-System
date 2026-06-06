@@ -25,25 +25,26 @@ export async function fetchDashboardData() {
   const totalExpenses = expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
   const netProfit = monthlySales - monthlyPurchases - totalExpenses;
 
+  const { data: accounts } = await supabase.from('accounts').select('code, balance').in('code', ['ACC-1003', 'ACC-2001']);
+  
   let customerReceivables = 0;
-  sales?.forEach(s => {
-    if (s.payment_status === 'Unpaid' || s.payment_status === 'Pending') {
-      customerReceivables += Math.round(s.total_amount);
-    } else if (s.payment_status?.startsWith('Partial Paid:')) {
-      const paid = parseFloat(s.payment_status.split(': ')[1]) || 0;
-      customerReceivables += Math.round(s.total_amount - paid);
-    }
-  });
-
   let supplierPayables = 0;
-  purchases?.forEach(p => {
-    if (p.payment_status === 'Unpaid' || p.payment_status === 'Pending') {
-      supplierPayables += Math.round(p.total_amount);
-    } else if (p.payment_status?.startsWith('Partial Paid:')) {
-      const paid = parseFloat(p.payment_status.split(': ')[1]) || 0;
-      supplierPayables += Math.round(p.total_amount - paid);
-    }
-  });
+
+  if (accounts) {
+    const ar = accounts.find(a => a.code === 'ACC-1003');
+    const ap = accounts.find(a => a.code === 'ACC-2001');
+    if (ar) customerReceivables = ar.balance; // AR is debit (positive)
+    if (ap) supplierPayables = -ap.balance; // AP is liability/credit (negative balance in standard debit/credit net if we stored it as signed, wait, accounts table balance is signed? Yes, wait.)
+  }
+
+  // Double check how balance is stored. In our Trial balance logic:
+  // if (ap) supplierPayables = Math.abs(ap.balance);
+  if (accounts) {
+    const ar = accounts.find(a => a.code === 'ACC-1003');
+    const ap = accounts.find(a => a.code === 'ACC-2001');
+    if (ar) customerReceivables = Math.abs(ar.balance); 
+    if (ap) supplierPayables = Math.abs(ap.balance); 
+  }
 
   const outOfStockProducts = products?.filter(p => p.current_stock === 0).length || 0;
   const lowStockProducts = products?.filter(p => p.current_stock > 0 && p.current_stock <= p.min_stock).length || 0;

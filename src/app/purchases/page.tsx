@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { recordPurchaseJournal, deleteJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -86,6 +87,7 @@ export default function PurchasesPage() {
       alert("Error deleting purchase: " + error.message);
       return;
     }
+    await deleteJournal(id);
     setPurchases(purchases.filter(p => p.id !== id));
   };
 
@@ -103,6 +105,7 @@ export default function PurchasesPage() {
       alert("Error updating status: " + error.message);
       return;
     }
+    await recordPurchaseJournal(id);
     setPurchases(purchases.map(p => p.id === id ? { ...p, paymentStatus: newStatus } : p));
   };
   
@@ -234,6 +237,7 @@ export default function PurchasesPage() {
     }));
 
     await supabase.from('purchase_items').insert(purchaseItemsData);
+    await recordPurchaseJournal(activePurchaseId);
 
     const newPurchaseDisplay = {
       id: activePurchaseId,

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { fetchDashboardData } from "../actions";
+import { recordSaleJournal, deleteJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +96,7 @@ export default function SalesPage() {
       alert("Error deleting sale: " + error.message);
       return;
     }
+    await deleteJournal(id);
     setSales(sales.filter(s => s.id !== id));
   };
 
@@ -112,6 +114,7 @@ export default function SalesPage() {
       alert("Error updating status: " + error.message);
       return;
     }
+    await recordSaleJournal(id);
     setSales(sales.map(s => s.id === id ? { ...s, paymentStatus: newStatus } : s));
   };
   
@@ -231,6 +234,7 @@ export default function SalesPage() {
     }));
 
     await supabase.from('sale_items').insert(saleItemsData);
+    await recordSaleJournal(activeSaleId);
 
     const newSaleDisplay = {
       id: activeSaleId,

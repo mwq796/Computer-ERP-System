@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { recordExpenseJournal, deleteJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Receipt, Filter, MoreHorizontal } from "lucide-react";
@@ -73,6 +74,7 @@ export default function ExpensesPage() {
       alert("Error deleting expense: " + error.message);
       return;
     }
+    await deleteJournal(id);
     setExpenses(expenses.filter(e => e.id !== id));
   };
 
@@ -95,6 +97,7 @@ export default function ExpensesPage() {
         return;
       }
       
+      await recordExpenseJournal(editingExpense.id);
       setExpenses(expenses.map(exp => 
         exp.id === editingExpense.id 
           ? { 
@@ -124,6 +127,7 @@ export default function ExpensesPage() {
         alert("Error adding expense: " + error.message);
         return;
       }
+      await recordExpenseJournal(newId);
 
       const newExpense = {
         id: newId,
