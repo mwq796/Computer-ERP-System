@@ -229,7 +229,7 @@ export default function PurchasesPage() {
     }
 
     const purchaseItemsData = cartItems.map(item => ({
-      purchase_id: activePurchaseId,
+      purchase_id: activePurchaseId!,
       product_id: item.product.id,
       quantity: item.quantity,
       unit_cost: item.unitCost,
@@ -237,7 +237,7 @@ export default function PurchasesPage() {
     }));
 
     await supabase.from('purchase_items').insert(purchaseItemsData);
-    await recordPurchaseJournal(activePurchaseId);
+    await recordPurchaseJournal(activePurchaseId!);
 
     const newPurchaseDisplay = {
       id: activePurchaseId,

@@ -226,7 +226,7 @@ export default function SalesPage() {
     }
 
     const saleItemsData = cartItems.map(item => ({
-      sale_id: activeSaleId,
+      sale_id: activeSaleId!,
       product_id: item.product.id,
       quantity: item.quantity,
       unit_price: item.product.sellingPrice,
@@ -234,7 +234,7 @@ export default function SalesPage() {
     }));
 
     await supabase.from('sale_items').insert(saleItemsData);
-    await recordSaleJournal(activeSaleId);
+    await recordSaleJournal(activeSaleId!);
 
     const newSaleDisplay = {
       id: activeSaleId,
