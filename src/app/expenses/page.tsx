@@ -5,10 +5,10 @@ import { createClient } from "@/utils/supabase/client";
 import { recordExpenseJournal, deleteJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Receipt, Filter, MoreHorizontal } from "lucide-react";
+import { Plus, Receipt, Filter, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 
 export default function ExpensesPage() {
@@ -268,16 +268,23 @@ export default function ExpensesPage() {
                     {formatCurrency(expense.amount)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                        <MoreHorizontal className="h-4 w-4 text-slate-500" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleEditClick(expense)}>Edit Expense</DropdownMenuItem>
-                        <DropdownMenuItem variant="destructive" onClick={() => handleDeleteExpense(expense.id)}>Delete Expense</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <TooltipProvider delay={200}>
+                      <div className="flex justify-end gap-1">
+                        <Tooltip>
+                          <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50" onClick={() => handleEditClick(expense)} />}>
+                            <Edit className="h-4 w-4" />
+                          </TooltipTrigger>
+                          <TooltipContent>Edit Expense</TooltipContent>
+                        </Tooltip>
+
+                        <Tooltip>
+                          <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-800 hover:bg-red-50" onClick={() => handleDeleteExpense(expense.id)} />}>
+                            <Trash2 className="h-4 w-4" />
+                          </TooltipTrigger>
+                          <TooltipContent>Delete Expense</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    </TooltipProvider>
                   </TableCell>
                 </TableRow>
               ))}

@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "react-toastify";
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
@@ -84,7 +85,7 @@ export default function PaymentsPage() {
       setIsLoading(true);
       await loadData();
     } else {
-      alert("Error recording payment");
+      toast.error("Error recording payment");
     }
   };
 
@@ -143,10 +144,10 @@ export default function PaymentsPage() {
               <Plus className="mr-2 h-4 w-4" />
               Record Payment
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] bg-white/90 backdrop-blur-2xl border-white/60 shadow-2xl rounded-2xl">
-              <DialogHeader>
-                <DialogTitle className="text-xl text-indigo-950">Record Manual Payment</DialogTitle>
-                <DialogDescription>
+            <DialogContent className="sm:max-w-xl bg-white/95 backdrop-blur-xl border border-indigo-100 shadow-2xl rounded-2xl">
+              <DialogHeader className="border-b border-indigo-50/50 pb-4 mb-4">
+                <DialogTitle className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">Record Manual Payment</DialogTitle>
+                <DialogDescription className="text-indigo-600/70">
                   Log a manual incoming or outgoing payment transaction.
                 </DialogDescription>
               </DialogHeader>

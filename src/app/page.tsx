@@ -48,9 +48,9 @@ export default function Dashboard() {
       </div>
 
       <Tabs defaultValue="sales" className="space-y-6">
-        <TabsList className="bg-white border border-slate-200">
-          <TabsTrigger value="sales" className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">Sales Dashboard</TabsTrigger>
-          <TabsTrigger value="purchases" className="data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700">Purchases Dashboard</TabsTrigger>
+        <TabsList className="bg-white border border-slate-200 flex flex-wrap h-auto sm:h-10">
+          <TabsTrigger value="sales" className="data-[state=active]:bg-emerald-500 data-[state=active]:text-white hover:bg-purple-500 hover:text-white transition-all w-full sm:w-auto">Sales Dashboard</TabsTrigger>
+          <TabsTrigger value="purchases" className="data-[state=active]:bg-purple-500 data-[state=active]:text-white hover:bg-green-500 hover:text-white transition-all w-full sm:w-auto">Purchases Dashboard</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sales" className="space-y-6">

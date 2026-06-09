@@ -25,25 +25,17 @@ export async function fetchDashboardData() {
   const totalExpenses = expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
   const netProfit = monthlySales - monthlyPurchases - totalExpenses;
 
-  const { data: accounts } = await supabase.from('accounts').select('code, balance').in('code', ['ACC-1003', 'ACC-2001']);
-  
+  const { data: customersData } = await supabase.from('customers').select('balance');
+  const { data: suppliersData } = await supabase.from('suppliers').select('balance');
+
   let customerReceivables = 0;
   let supplierPayables = 0;
 
-  if (accounts) {
-    const ar = accounts.find(a => a.code === 'ACC-1003');
-    const ap = accounts.find(a => a.code === 'ACC-2001');
-    if (ar) customerReceivables = ar.balance; // AR is debit (positive)
-    if (ap) supplierPayables = -ap.balance; // AP is liability/credit (negative balance in standard debit/credit net if we stored it as signed, wait, accounts table balance is signed? Yes, wait.)
+  if (customersData) {
+    customerReceivables = customersData.reduce((sum, c) => sum + (c.balance || 0), 0);
   }
-
-  // Double check how balance is stored. In our Trial balance logic:
-  // if (ap) supplierPayables = Math.abs(ap.balance);
-  if (accounts) {
-    const ar = accounts.find(a => a.code === 'ACC-1003');
-    const ap = accounts.find(a => a.code === 'ACC-2001');
-    if (ar) customerReceivables = Math.abs(ar.balance); 
-    if (ap) supplierPayables = Math.abs(ap.balance); 
+  if (suppliersData) {
+    supplierPayables = suppliersData.reduce((sum, s) => sum + (s.balance || 0), 0);
   }
 
   const outOfStockProducts = products?.filter(p => p.current_stock === 0).length || 0;

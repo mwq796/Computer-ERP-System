@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "react-toastify";
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
@@ -61,7 +62,7 @@ export default function SettingsPage() {
     if (!confirm("Are you sure you want to delete this user?")) return;
     const { error } = await supabase.from('users').delete().eq('id', id);
     if (error) {
-      alert("Error deleting user: " + error.message);
+      toast.error("Error deleting user: " + error.message);
       return;
     }
     setUsers(users.filter(u => u.id !== id));
@@ -77,7 +78,7 @@ export default function SettingsPage() {
         status: userForm.status
       }).eq('id', editingUser.id);
       if (error) {
-        alert("Error updating user: " + error.message);
+        toast.error("Error updating user: " + error.message);
         return;
       }
       setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...userForm } : u));
@@ -92,7 +93,7 @@ export default function SettingsPage() {
       };
       const { error } = await supabase.from('users').insert([dbUser]);
       if (error) {
-        alert("Error adding user: " + error.message);
+        toast.error("Error adding user: " + error.message);
         return;
       }
       setUsers([dbUser, ...users]);
@@ -208,11 +209,11 @@ export default function SettingsPage() {
                   <Plus className="mr-2 h-4 w-4" />
                   Add User
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-xl bg-white/95 backdrop-blur-xl border border-indigo-100 shadow-2xl rounded-2xl">
                   <form onSubmit={handleSaveUser}>
-                    <DialogHeader>
-                      <DialogTitle>{editingUser ? "Edit User" : "Add New User"}</DialogTitle>
-                      <DialogDescription>
+                    <DialogHeader className="border-b border-indigo-50/50 pb-4 mb-4">
+                      <DialogTitle className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">{editingUser ? "Edit User" : "Add New User"}</DialogTitle>
+                      <DialogDescription className="text-indigo-600/70">
                         {editingUser ? "Update user access and details." : "Create a new user to give them access to the ERP."}
                       </DialogDescription>
                     </DialogHeader>

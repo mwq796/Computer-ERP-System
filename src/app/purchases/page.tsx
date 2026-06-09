@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "react-toastify";
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
@@ -6,13 +7,14 @@ import { recordPurchaseJournal, deleteJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Filter, ShoppingBag, Truck, DollarSign, MoreHorizontal, Search, Users, Package } from "lucide-react";
+import { Plus, Download, Filter, ShoppingBag, Truck, DollarSign, MoreHorizontal, Search, Users, Package, Eye, Edit, CheckCircle, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function PurchasesPage() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -30,6 +32,9 @@ export default function PurchasesPage() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [statusUpdateId, setStatusUpdateId] = useState<string | null>(null);
+  const [newStatusValue, setNewStatusValue] = useState<string>('Paid');
+  const [newStatusAmount, setNewStatusAmount] = useState<number | string>('');
   const supabase = createClient();
 
   useEffect(() => {
@@ -60,6 +65,7 @@ export default function PurchasesPage() {
           discount: p.discount,
           subtotal: p.subtotal,
           items: p.purchase_items?.map((item: any) => ({
+            productId: item.product_id,
             productName: item.products?.name || 'Unknown Product',
             quantity: item.quantity,
             unitCost: item.unit_cost,
@@ -71,7 +77,8 @@ export default function PurchasesPage() {
         id: p.id,
         name: p.name,
         sellingPrice: p.selling_price,
-        purchasePrice: p.purchase_price
+        purchasePrice: p.purchase_price,
+        stock: p.current_stock || 0
       })));
       if (suppliersRes.data) setSuppliers(suppliersRes.data);
       
@@ -82,31 +89,89 @@ export default function PurchasesPage() {
 
   const handleDeletePurchase = async (id: string) => {
     if (!confirm("Are you sure you want to delete this purchase order?")) return;
+
+    const purchase = purchases.find(p => p.id === id);
+    if (purchase) {
+      const remainingBalance = purchase.totalAmount - (purchase.paidAmount || 0);
+      if (remainingBalance > 0 && purchase.supplierName && purchase.supplierName !== 'Unknown Supplier') {
+        const supplier = suppliers.find(s => s.name === purchase.supplierName);
+        if (supplier) {
+          const newBalance = (supplier.balance || 0) - remainingBalance;
+          await supabase.from('suppliers').update({ balance: newBalance }).eq('id', supplier.id);
+          setSuppliers(suppliers.map(s => s.id === supplier.id ? { ...s, balance: newBalance } : s));
+        }
+      }
+    }
+
+    const { data: oldItems } = await supabase.from('purchase_items').select('*').eq('purchase_id', id);
+    if (oldItems) {
+      for (const item of oldItems) {
+        if (!item.product_id) continue;
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          product.stock -= item.quantity;
+          await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+        }
+      }
+      setProducts([...products]);
+    }
+
     const { error } = await supabase.from('purchases').delete().eq('id', id);
     if (error) {
-      alert("Error deleting purchase: " + error.message);
+      toast.error("Error deleting purchase: " + error.message);
       return;
     }
     await deleteJournal(id);
     setPurchases(purchases.filter(p => p.id !== id));
+    toast.success("Purchase deleted successfully");
   };
 
-  const handleEditPurchaseStatus = async (id: string, currentStatus: string) => {
-    const newStatus = prompt("Enter new status (Paid, Unpaid):", currentStatus);
-    if (!newStatus || newStatus === currentStatus) return;
-    
-    if (!['Paid', 'Unpaid'].includes(newStatus)) {
-      alert("Invalid status. Please use Paid or Unpaid.");
+  const handleEditPurchaseStatus = (id: string, currentStatus: string) => {
+    setStatusUpdateId(id);
+    let baseStatus = currentStatus === 'Paid' ? 'Paid' : 'Unpaid';
+    setNewStatusValue(baseStatus);
+    setNewStatusAmount('');
+  };
+
+  const submitStatusUpdate = async () => {
+    if (!statusUpdateId) return;
+    let finalStatus = newStatusValue;
+
+    const purchase = purchases.find(p => p.id === statusUpdateId);
+    if (!purchase) return;
+
+    const oldStatus = purchase.paymentStatus;
+    if (oldStatus === finalStatus) {
+      setStatusUpdateId(null);
       return;
     }
-    
-    const { error } = await supabase.from('purchases').update({ payment_status: newStatus }).eq('id', id);
+
+    const { error } = await supabase.from('purchases').update({ payment_status: finalStatus }).eq('id', statusUpdateId);
     if (error) {
-      alert("Error updating status: " + error.message);
+      toast.error("Error updating status: " + error.message);
       return;
     }
-    await recordPurchaseJournal(id);
-    setPurchases(purchases.map(p => p.id === id ? { ...p, paymentStatus: newStatus } : p));
+
+    if (purchase.supplierName && purchase.supplierName !== 'Unknown Supplier') {
+      const supplier = suppliers.find(s => s.name === purchase.supplierName);
+      if (supplier) {
+        let newBalance = supplier.balance || 0;
+        if (oldStatus === 'Unpaid' && finalStatus === 'Paid') {
+          newBalance -= purchase.totalAmount;
+        } else if (oldStatus === 'Paid' && finalStatus === 'Unpaid') {
+          newBalance += purchase.totalAmount;
+        }
+        
+        await supabase.from('suppliers').update({ balance: newBalance }).eq('id', supplier.id);
+        setSuppliers(suppliers.map(s => s.id === supplier.id ? { ...s, balance: newBalance } : s));
+      }
+    }
+
+    await recordPurchaseJournal(statusUpdateId);
+    const newPaidAmount = finalStatus === 'Paid' ? purchase.totalAmount : 0;
+    setPurchases(purchases.map(item => item.id === statusUpdateId ? { ...item, paymentStatus: finalStatus, paidAmount: newPaidAmount } : item));
+    setStatusUpdateId(null);
+    toast.success("Payment status updated");
   };
   
   const handleProductSelect = (val: string) => {
@@ -210,6 +275,19 @@ export default function PurchasesPage() {
         }
       }
 
+      // Reverse previous stock
+      const { data: oldItems } = await supabase.from('purchase_items').select('*').eq('purchase_id', editingId);
+      if (oldItems) {
+        for (const item of oldItems) {
+          if (!item.product_id) continue;
+          const product = products.find(p => p.id === item.product_id);
+          if (product) {
+            product.stock -= item.quantity;
+            await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+          }
+        }
+      }
+
       await supabase.from('purchase_items').delete().eq('purchase_id', editingId);
     } else {
       activePurchaseId = `PO-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
@@ -237,6 +315,17 @@ export default function PurchasesPage() {
     }));
 
     await supabase.from('purchase_items').insert(purchaseItemsData);
+
+    // Increase new stock
+    for (const item of cartItems) {
+      const product = products.find(p => p.id === item.product.id);
+      if (product) {
+        product.stock += item.quantity;
+        await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+      }
+    }
+    setProducts([...products]);
+
     await recordPurchaseJournal(activePurchaseId!);
 
     const newPurchaseDisplay = {
@@ -249,6 +338,7 @@ export default function PurchasesPage() {
       paidAmount: finalPaidAmount,
       paymentStatus: paymentStatus,
       items: cartItems.map(item => ({
+        productId: item.product.id,
         productName: item.product.name,
         quantity: item.quantity,
         unitCost: item.unitCost,
@@ -554,20 +644,39 @@ export default function PurchasesPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Dialog>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                          <MoreHorizontal className="h-4 w-4 text-slate-500" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DialogTrigger render={<DropdownMenuItem />} nativeButton={false}>
-                            View Details
-                          </DialogTrigger>
-                          <DropdownMenuItem onClick={() => handleEditPurchase(purchase)}>Edit Purchase</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleEditPurchaseStatus(purchase.id, purchase.paymentStatus)}>Update Status</DropdownMenuItem>
-                          <DropdownMenuItem variant="destructive" onClick={() => handleDeletePurchase(purchase.id)}>Delete Order</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <TooltipProvider delay={200}>
+                        <div className="flex justify-end gap-1">
+                          <Tooltip>
+                            <DialogTrigger render={
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50" />} />
+                            }>
+                              <Eye className="h-4 w-4" />
+                            </DialogTrigger>
+                            <TooltipContent>View Details</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50" onClick={() => handleEditPurchase(purchase)} />}>
+                              <Edit className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipContent>Edit Purchase</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50" onClick={() => handleEditPurchaseStatus(purchase.id, purchase.paymentStatus)} />}>
+                              <CheckCircle className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipContent>Update Status</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-800 hover:bg-red-50" onClick={() => handleDeletePurchase(purchase.id)} />}>
+                              <Trash2 className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipContent>Delete Order</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Purchase Order Details</DialogTitle>
@@ -608,6 +717,35 @@ export default function PurchasesPage() {
           </Table>
         </div>
       </div>
+
+      {/* Status Update Dialog */}
+      <Dialog open={!!statusUpdateId} onOpenChange={(open) => !open && setStatusUpdateId(null)}>
+        <DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-xl border border-indigo-100 shadow-2xl rounded-2xl">
+          <DialogHeader className="border-b border-indigo-50/50 pb-4 mb-4">
+            <DialogTitle className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">Update Payment Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Payment Status</Label>
+              <Select value={newStatusValue} onValueChange={(val) => val && setNewStatusValue(val)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Paid">Paid in Full</SelectItem>
+                  
+                  <SelectItem value="Unpaid">Unpaid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+          </div>
+          <DialogFooter className="mt-6 border-t border-indigo-50/50 pt-4">
+            <Button variant="outline" onClick={() => setStatusUpdateId(null)}>Cancel</Button>
+            <Button onClick={submitStatusUpdate}>Update Status</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

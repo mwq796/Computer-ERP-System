@@ -1,4 +1,5 @@
 "use client";
+import { toast } from "react-toastify";
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
@@ -6,21 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter, MoreHorizontal, Package, TrendingDown, Layers } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Package, TrendingDown, Layers, Eye, Edit, Trash2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export default function ProductsPage() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
   const [products, setProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const supabase = createClient();
@@ -51,19 +57,22 @@ export default function ProductsPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [formData, setFormData] = useState({
-    name: "", brand: "", modelNumber: "", category: "", purchasePrice: "", sellingPrice: "", currentStock: "0", minStock: "5", warrantyMonths: "12"
+    name: "", brand: "", customBrand: "", modelNumber: "", category: "", purchasePrice: "", sellingPrice: "", currentStock: "0", minStock: "5", warrantyMonths: "12"
   });
 
   const resetForm = () => {
-    setFormData({ name: "", brand: "", modelNumber: "", category: "", purchasePrice: "", sellingPrice: "", currentStock: "0", minStock: "5", warrantyMonths: "12" });
+    setFormData({ name: "", brand: "", customBrand: "", modelNumber: "", category: "", purchasePrice: "", sellingPrice: "", currentStock: "0", minStock: "5", warrantyMonths: "12" });
     setEditingProduct(null);
   };
 
   const handleEditClick = (product: any) => {
     setEditingProduct(product);
+    const predefinedBrands = ["Samsung", "Dell", "HP", "Apple", "Lenovo", "ASUS", "Acer", "Logitech", "Corsair", "Kingston"];
+    const isPredefined = predefinedBrands.includes(product.brand);
     setFormData({
       name: product.name,
-      brand: product.brand,
+      brand: isPredefined ? product.brand : "Other",
+      customBrand: isPredefined ? "" : product.brand,
       modelNumber: product.modelNumber,
       category: product.category,
       purchasePrice: product.purchasePrice.toString(),
@@ -79,7 +88,7 @@ export default function ProductsPage() {
     if (!confirm("Are you sure you want to delete this product?")) return;
     const { error } = await supabase.from('products').delete().eq('id', id);
     if (error) {
-      alert("Error deleting product: " + error.message);
+      toast.error("Error deleting product: " + error.message);
       return;
     }
     setProducts(products.filter(p => p.id !== id));
@@ -88,11 +97,13 @@ export default function ProductsPage() {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const finalBrand = formData.brand === 'Other' ? formData.customBrand : formData.brand;
+
     const dbProduct = {
       sku: formData.modelNumber,
       name: formData.name,
       category: formData.category,
-      brand: formData.brand,
+      brand: finalBrand,
       purchase_price: parseFloat(formData.purchasePrice) || 0,
       selling_price: parseFloat(formData.sellingPrice) || 0,
       current_stock: parseInt(formData.currentStock) || 0,
@@ -105,7 +116,7 @@ export default function ProductsPage() {
       const { error } = await supabase.from('products').update(dbProduct).eq('id', editingProduct.id);
       
       if (error) {
-        alert("Error updating product: " + error.message);
+        toast.error("Error updating product: " + error.message);
         return;
       }
       
@@ -116,7 +127,7 @@ export default function ProductsPage() {
               name: formData.name,
               modelNumber: formData.modelNumber,
               category: formData.category,
-              brand: formData.brand,
+              brand: finalBrand,
               purchasePrice: parseFloat(formData.purchasePrice) || 0,
               sellingPrice: parseFloat(formData.sellingPrice) || 0,
               currentStock: parseInt(formData.currentStock) || 0,
@@ -133,7 +144,7 @@ export default function ProductsPage() {
       const { error } = await supabase.from('products').insert([newDbProduct]);
       
       if (error) {
-        alert("Error adding product: " + error.message);
+        toast.error("Error adding product: " + error.message);
         return;
       }
 
@@ -142,7 +153,7 @@ export default function ProductsPage() {
         name: formData.name,
         modelNumber: formData.modelNumber,
         category: formData.category,
-        brand: formData.brand,
+        brand: finalBrand,
         purchasePrice: parseFloat(formData.purchasePrice) || 0,
         sellingPrice: parseFloat(formData.sellingPrice) || 0,
         currentStock: parseInt(formData.currentStock) || 0,
@@ -158,11 +169,18 @@ export default function ProductsPage() {
     resetForm();
   };
 
-  const filteredProducts = products.filter(product => 
-    (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-    (product.modelNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (product.brand || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredProducts = products.filter(product => {
+    const searchMatch = (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+      (product.modelNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.brand || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+    const statusMatch = statusFilter === "All" || product.status === statusFilter;
+    const categoryMatch = categoryFilter === "All" || product.category === categoryFilter;
+
+    return searchMatch && statusMatch && categoryMatch;
+  });
+
+  const uniqueCategories = Array.from(new Set(products.map(p => p.category))).filter(Boolean);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-PK", {
@@ -187,10 +205,26 @@ export default function ProductsPage() {
           <p className="text-muted-foreground">Manage your store&apos;s product catalog and pricing.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
-            <Filter className="mr-2 h-4 w-4" />
-            Filters
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <Filter className="mr-2 h-4 w-4" />
+              Filters
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem checked={statusFilter === "All"} onCheckedChange={() => setStatusFilter("All")}>All Statuses</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={statusFilter === "In Stock"} onCheckedChange={() => setStatusFilter("In Stock")}>In Stock</DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem checked={statusFilter === "Low Stock"} onCheckedChange={() => setStatusFilter("Low Stock")}>Low Stock</DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Filter by Category</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem checked={categoryFilter === "All"} onCheckedChange={() => setCategoryFilter("All")}>All Categories</DropdownMenuCheckboxItem>
+              {uniqueCategories.map(cat => (
+                <DropdownMenuCheckboxItem key={cat as string} checked={categoryFilter === cat} onCheckedChange={() => setCategoryFilter(cat as string)}>
+                  {cat as string}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           
           <Dialog open={isAddOpen} onOpenChange={(open) => {
             setIsAddOpen(open);
@@ -200,53 +234,80 @@ export default function ProductsPage() {
               <Plus className="mr-2 h-4 w-4" />
               Add Product
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md overflow-y-auto max-h-[90vh]">
+            <DialogContent className="sm:max-w-2xl overflow-y-auto max-h-[90vh] bg-white/95 backdrop-blur-xl border border-indigo-100 shadow-2xl rounded-2xl">
               <form onSubmit={handleSaveProduct}>
-                <DialogHeader>
-                  <DialogTitle>{editingProduct ? "Edit Product" : "Add New Product"}</DialogTitle>
-                  <DialogDescription>
+                <DialogHeader className="border-b border-indigo-50/50 pb-4 mb-4">
+                  <DialogTitle className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+                    {editingProduct ? "Edit Product Details" : "Add New Product"}
+                  </DialogTitle>
+                  <DialogDescription className="text-indigo-600/70">
                     {editingProduct ? "Update the details of the selected product." : "Enter the details of the new product to add it to your catalog."}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-6 py-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Category</Label>
+                      <Select value={formData.category} onValueChange={(val) => val && setFormData({...formData, category: val})} required>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Processors">Processors</SelectItem>
+                          <SelectItem value="Keyboards">Keyboards</SelectItem>
+                          <SelectItem value="Monitors">Monitors</SelectItem>
+                          <SelectItem value="Graphics Cards">Graphics Cards</SelectItem>
+                          <SelectItem value="Mice">Mice</SelectItem>
+                          <SelectItem value="Laptops">Laptops</SelectItem>
+                          <SelectItem value="HDDs">HDDs</SelectItem>
+                          <SelectItem value="SSDs">SSDs</SelectItem>
+                          <SelectItem value="RAM">RAM</SelectItem>
+                          <SelectItem value="Power Supplies">Power Supplies</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Brand</Label>
+                      <Select value={formData.brand} onValueChange={(val) => val && setFormData({...formData, brand: val})} required>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select brand" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Samsung">Samsung</SelectItem>
+                          <SelectItem value="Dell">Dell</SelectItem>
+                          <SelectItem value="HP">HP</SelectItem>
+                          <SelectItem value="Apple">Apple</SelectItem>
+                          <SelectItem value="Lenovo">Lenovo</SelectItem>
+                          <SelectItem value="ASUS">ASUS</SelectItem>
+                          <SelectItem value="Acer">Acer</SelectItem>
+                          <SelectItem value="Logitech">Logitech</SelectItem>
+                          <SelectItem value="Corsair">Corsair</SelectItem>
+                          <SelectItem value="Kingston">Kingston</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {formData.brand === "Other" && (
+                    <div className="space-y-2">
+                      <Label>Brand Name</Label>
+                      <Input placeholder="Enter brand name" value={formData.customBrand} onChange={(e) => setFormData({...formData, customBrand: e.target.value})} required />
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <Label>Product Name</Label>
                     <Input placeholder="e.g. Samsung 980 PRO NVMe M.2" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} required />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Brand</Label>
-                      <Input placeholder="e.g. Samsung" value={formData.brand} onChange={(e) => setFormData({...formData, brand: e.target.value})} required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Model Number</Label>
-                      <Input placeholder="e.g. MZ-V8P1T0B/AM" value={formData.modelNumber} onChange={(e) => setFormData({...formData, modelNumber: e.target.value})} required />
-                    </div>
-                  </div>
-
                   <div className="space-y-2">
-                    <Label>Category</Label>
-                    <Select value={formData.category} onValueChange={(val) => val && setFormData({...formData, category: val})} required>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Processors">Processors</SelectItem>
-                        <SelectItem value="Keyboards">Keyboards</SelectItem>
-                        <SelectItem value="Monitors">Monitors</SelectItem>
-                        <SelectItem value="Graphics Cards">Graphics Cards</SelectItem>
-                        <SelectItem value="Mice">Mice</SelectItem>
-                        <SelectItem value="Laptops">Laptops</SelectItem>
-                        <SelectItem value="HDDs">HDDs</SelectItem>
-                        <SelectItem value="SSDs">SSDs</SelectItem>
-                        <SelectItem value="RAM">RAM</SelectItem>
-                        <SelectItem value="Power Supplies">Power Supplies</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Model Number</Label>
+                    <Input placeholder="e.g. MZ-V8P1T0B/AM" value={formData.modelNumber} onChange={(e) => setFormData({...formData, modelNumber: e.target.value})} required />
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Purchase Price</Label>
                       <Input type="number" placeholder="0.00" value={formData.purchasePrice} onChange={(e) => setFormData({...formData, purchasePrice: e.target.value})} required />
@@ -257,7 +318,7 @@ export default function ProductsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Opening Stock</Label>
                       <Input type="number" value={formData.currentStock} onChange={(e) => setFormData({...formData, currentStock: e.target.value})} required />
@@ -273,7 +334,11 @@ export default function ProductsPage() {
                     <Input type="number" value={formData.warrantyMonths} onChange={(e) => setFormData({...formData, warrantyMonths: e.target.value})} required />
                   </div>
                   
-                  <Button type="submit" className="w-full">{editingProduct ? "Update" : "Save"} Product</Button>
+                  <div className="mt-6 border-t border-indigo-50/50 pt-4">
+                    <Button type="submit" className="w-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-md transition-all duration-200">
+                      {editingProduct ? "Update" : "Save"} Product
+                    </Button>
+                  </div>
                 </div>
               </form>
             </DialogContent>
@@ -387,24 +452,32 @@ export default function ProductsPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Dialog>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4 text-slate-500" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DialogTrigger render={<DropdownMenuItem />} nativeButton={false}>
-                            View Details
-                          </DialogTrigger>
-                          <DropdownMenuItem onClick={() => handleEditClick(product)}>
-                            Edit Product
-                          </DropdownMenuItem>
-                          <DropdownMenuItem variant="destructive" onClick={() => handleDeleteProduct(product.id)}>
-                            Delete Product
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <TooltipProvider delay={200}>
+                        <div className="flex justify-end gap-1">
+                          <Tooltip>
+                            <DialogTrigger render={
+                              <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50" />} />
+                            }>
+                              <Eye className="h-4 w-4" />
+                            </DialogTrigger>
+                            <TooltipContent>View Details</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50" onClick={() => handleEditClick(product)} />}>
+                              <Edit className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipContent>Edit Product</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-800 hover:bg-red-50" onClick={() => handleDeleteProduct(product.id)} />}>
+                              <Trash2 className="h-4 w-4" />
+                            </TooltipTrigger>
+                            <TooltipContent>Delete Product</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </TooltipProvider>
                       
                       <DialogContent>
                         <DialogHeader>
