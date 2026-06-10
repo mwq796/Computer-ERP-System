@@ -21,12 +21,10 @@ const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Customers", href: "/customers", icon: Users },
   { name: "Products", href: "/products", icon: Package },
-  { name: "Inventory", href: "/inventory", icon: Boxes },
-  { name: "Purchases", href: "/purchases", icon: ShoppingCart },
   { name: "Sales", href: "/sales", icon: TrendingUp },
+  { name: "Purchases", href: "/purchases", icon: ShoppingCart },
   { name: "Suppliers", href: "/suppliers", icon: Truck },
   { name: "Expenses", href: "/expenses", icon: Receipt },
-  { name: "Payments", href: "/payments", icon: CreditCard },
   { name: "Reports", href: "/reports", icon: PieChart },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

@@ -1,20 +1,30 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import { createClient } from "@/utils/supabase/client";
 import { recordExpenseJournal, deleteJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Receipt, Filter, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [filterPeriod, setFilterPeriod] = useState<'all' | 'month' | 'week'>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const handleDeleteExpense = (id: string) => setDeleteConfirmId(id);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     async function loadData() {
@@ -38,7 +48,7 @@ export default function ExpensesPage() {
   const [editingExpense, setEditingExpense] = useState<any>(null);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
-    category: "",
+    category: "Utilities",
     description: "",
     paymentMethod: "Cash",
     amount: ""
@@ -47,7 +57,7 @@ export default function ExpensesPage() {
   const resetForm = () => {
     setFormData({
       date: new Date().toISOString().split('T')[0],
-      category: "",
+      category: "Utilities",
       description: "",
       paymentMethod: "Cash",
       amount: ""
@@ -67,19 +77,21 @@ export default function ExpensesPage() {
     setIsAddOpen(true);
   };
 
-  const handleDeleteExpense = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this expense?")) return;
+  const executeDelete = async (id: string) => {
     const { error } = await supabase.from('expenses').delete().eq('id', id);
     if (error) {
-      alert("Error deleting expense: " + error.message);
+      toast.error("Error deleting expense: " + error.message);
       return;
     }
     await deleteJournal(id);
     setExpenses(expenses.filter(e => e.id !== id));
+    toast.success("Expense deleted successfully!");
+    router.refresh();
   };
 
   const handleSaveExpense = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.description.trim() || !formData.amount) return toast.warning("Description and Amount are required.");
     
     if (editingExpense) {
       const dbExpense = {
@@ -93,7 +105,7 @@ export default function ExpensesPage() {
       const { error } = await supabase.from('expenses').update(dbExpense).eq('id', editingExpense.id);
       
       if (error) {
-        alert("Error updating expense: " + error.message);
+        toast.error("Error updating expense: " + error.message);
         return;
       }
       
@@ -110,6 +122,8 @@ export default function ExpensesPage() {
             } 
           : exp
       ));
+      toast.success("Expense updated successfully!");
+    router.refresh();
     } else {
       const newId = `EXP-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
       
@@ -124,7 +138,7 @@ export default function ExpensesPage() {
 
       const { error } = await supabase.from('expenses').insert([dbExpense]);
       if (error) {
-        alert("Error adding expense: " + error.message);
+        toast.error("Error adding expense: " + error.message);
         return;
       }
       await recordExpenseJournal(newId);
@@ -139,6 +153,8 @@ export default function ExpensesPage() {
       };
       
       setExpenses([newExpense, ...expenses]);
+      toast.success("Expense added successfully!");
+    router.refresh();
     }
     
     setIsAddOpen(false);
@@ -161,7 +177,23 @@ export default function ExpensesPage() {
     });
   };
 
-  const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+  const filteredExpenses = expenses.filter(e => {
+    if (filterCategory !== 'all' && e.category !== filterCategory) return false;
+    if (filterPeriod === 'all') return true;
+    const expenseDate = new Date(e.date);
+    const now = new Date();
+    if (filterPeriod === 'month') {
+      return expenseDate.getMonth() === now.getMonth() && expenseDate.getFullYear() === now.getFullYear();
+    }
+    if (filterPeriod === 'week') {
+      const weekAgo = new Date();
+      weekAgo.setDate(now.getDate() - 7);
+      return expenseDate >= weekAgo;
+    }
+    return true;
+  });
+
+  const totalExpenses = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   if (isLoading) {
     return <div className="p-8 flex items-center justify-center text-muted-foreground">Loading expenses...</div>;
@@ -175,10 +207,34 @@ export default function ExpensesPage() {
           <p className="text-muted-foreground">Track and manage your operational expenses.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
-            <Filter className="mr-2 h-4 w-4" />
-            Filters
-          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <Filter className="mr-2 h-4 w-4" />
+              Category: {filterCategory === 'all' ? 'All' : filterCategory}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setFilterCategory('all')}>All Categories</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterCategory('Utilities')}>Utilities</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterCategory('Payroll')}>Payroll</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterCategory('Rent')}>Rent</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterCategory('Marketing')}>Marketing</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterCategory('Maintenance')}>Maintenance</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterCategory('Taxes')}>Taxes</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterCategory('Others')}>Others</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <Filter className="mr-2 h-4 w-4" />
+              Filters: {filterPeriod === 'all' ? 'All Time' : filterPeriod === 'month' ? 'This Month' : 'Last 7 Days'}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setFilterPeriod('all')}>All Time</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterPeriod('month')}>This Month</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setFilterPeriod('week')}>Last 7 Days</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Dialog open={isAddOpen} onOpenChange={(open) => {
             setIsAddOpen(open);
             if (!open) resetForm();
@@ -199,7 +255,20 @@ export default function ExpensesPage() {
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="category" className="text-right">Category</Label>
-                    <Input id="category" placeholder="e.g. Utilities, Rent" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="col-span-3" required />
+                    <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val || ""})}>
+                      <SelectTrigger className="col-span-3">
+                        <SelectValue placeholder="Select Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Utilities">Utilities</SelectItem>
+                        <SelectItem value="Payroll">Payroll</SelectItem>
+                        <SelectItem value="Rent">Rent</SelectItem>
+                        <SelectItem value="Marketing">Marketing</SelectItem>
+                        <SelectItem value="Maintenance">Maintenance</SelectItem>
+                        <SelectItem value="Taxes">Taxes</SelectItem>
+                        <SelectItem value="Others">Others</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="description" className="text-right">Description</Label>
@@ -234,7 +303,7 @@ export default function ExpensesPage() {
           </div>
         </div>
         <div className="bg-white px-4 py-2 rounded-lg border border-indigo-100 text-sm font-medium text-indigo-800">
-          Viewing All Time
+          {filterPeriod === 'all' ? 'Viewing All Time' : filterPeriod === 'month' ? 'Viewing This Month' : 'Viewing Last 7 Days'}
         </div>
       </div>
 
@@ -253,7 +322,7 @@ export default function ExpensesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {expenses.map((expense) => (
+              {filteredExpenses.map((expense) => (
                 <TableRow key={expense.id}>
                   <TableCell className="font-medium text-slate-500">{expense.id}</TableCell>
                   <TableCell>{formatDate(expense.date)}</TableCell>
@@ -292,6 +361,14 @@ export default function ExpensesPage() {
           </Table>
         </div>
       </div>
+    
+      <ConfirmModal 
+        isOpen={!!deleteConfirmId} 
+        onClose={() => setDeleteConfirmId(null)} 
+        onConfirm={() => deleteConfirmId && executeDelete(deleteConfirmId)} 
+        title="Confirm Deletion" 
+        description="Are you sure you want to delete this expense? This action cannot be undone." 
+      />
     </div>
   );
 }

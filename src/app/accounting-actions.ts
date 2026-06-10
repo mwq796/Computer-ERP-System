@@ -157,3 +157,50 @@ export async function deleteJournal(referenceId: string) {
   await supabase.from('journals').delete().eq('reference', referenceId);
   return { success: true };
 }
+
+
+export async function recordSaleReturnJournal(saleId: string, refundAmount: number, customerId: string | null) {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const journalId = `JRN-RET-${saleId}-${Date.now()}`;
+  
+  await supabase.from('journals').insert([{
+    id: journalId,
+    date: new Date().toISOString(),
+    reference: saleId,
+    description: `Return for Sale ${saleId}`,
+    type: 'Credit Note'
+  }]);
+
+  const lines = [
+    { journal_id: journalId, account_id: 'ACC-4001', debit: refundAmount, credit: 0, customer_id: customerId }, // Reverse Revenue
+    { journal_id: journalId, account_id: 'ACC-1003', debit: 0, credit: refundAmount, customer_id: customerId }  // Reverse AR (or Bank, but we assume AR for simplicity or create store credit)
+  ];
+
+  await supabase.from('journal_lines').insert(lines);
+  return { success: true };
+}
+
+export async function recordPurchaseReturnJournal(purchaseId: string, refundAmount: number, supplierId: string | null) {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const journalId = `JRN-PRET-${purchaseId}-${Date.now()}`;
+  
+  await supabase.from('journals').insert([{
+    id: journalId,
+    date: new Date().toISOString(),
+    reference: purchaseId,
+    description: `Return for Purchase ${purchaseId}`,
+    type: 'Debit Note'
+  }]);
+
+  const lines = [
+    { journal_id: journalId, account_id: 'ACC-2001', debit: refundAmount, credit: 0, supplier_id: supplierId }, // Reverse AP
+    { journal_id: journalId, account_id: 'ACC-1004', debit: 0, credit: refundAmount, supplier_id: supplierId }  // Reverse Inventory
+  ];
+
+  await supabase.from('journal_lines').insert(lines);
+  return { success: true };
+}

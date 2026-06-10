@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,11 +30,13 @@ export default function SettingsPage() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [userForm, setUserForm] = useState({ name: "", email: "", role: "Staff", status: "Active" });
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const handleDeleteUser = (id: string) => setDeleteConfirmId(id);
   const supabase = createClient();
 
   useEffect(() => {
     async function loadUsers() {
-      const { data } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('users').select('*');
       if (data) {
         setUsers(data);
       }
@@ -58,8 +61,7 @@ export default function SettingsPage() {
     setIsAddUserOpen(true);
   };
 
-  const handleDeleteUser = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
+  const executeDelete = async (id: string) => {
     const { error } = await supabase.from('users').delete().eq('id', id);
     if (error) {
       toast.error("Error deleting user: " + error.message);
@@ -317,6 +319,14 @@ export default function SettingsPage() {
           Notification preferences are active. (Demo Mode)
         </TabsContent>
       </Tabs>
+    
+      <ConfirmModal 
+        isOpen={!!deleteConfirmId} 
+        onClose={() => setDeleteConfirmId(null)} 
+        onConfirm={() => deleteConfirmId && executeDelete(deleteConfirmId)} 
+        title="Confirm Deletion" 
+        description="Are you sure you want to delete this user? This action cannot be undone." 
+      />
     </div>
   );
 }

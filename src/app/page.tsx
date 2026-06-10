@@ -128,7 +128,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="pl-2">
                 <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <AreaChart
                       data={trends}
                       margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
@@ -165,7 +165,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
                       <XAxis type="number" hide />
                       <YAxis dataKey="name" type="category" hide />
@@ -303,7 +303,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="pl-2">
                 <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <AreaChart
                       data={trends}
                       margin={{ top: 10, right: 30, left: 0, bottom: 0 }}

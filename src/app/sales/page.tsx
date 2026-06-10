@@ -1,9 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { fetchDashboardData } from "../actions";
-import { recordSaleJournal, deleteJournal } from "../accounting-actions";
+import { recordSaleJournal, deleteJournal, recordSaleReturnJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +44,10 @@ export default function SalesPage() {
   const [newStatusValue, setNewStatusValue] = useState<string>('Paid');
   const [newStatusAmount, setNewStatusAmount] = useState<number | string>('');
   const [saleToReturn, setSaleToReturn] = useState<string | null>(null);
+  const [returnItems, setReturnItems] = useState<any[]>([]);
+  const [returnReason, setReturnReason] = useState("");
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     async function loadData() {
@@ -88,7 +92,8 @@ export default function SalesPage() {
         id: p.id,
         name: p.name,
         sellingPrice: p.selling_price,
-        stock: p.current_stock || 0
+        stock: p.current_stock || 0,
+        minStock: p.min_stock || 0
       })));
       if (customersRes.data) setCustomers(customersRes.data);
 
@@ -103,33 +108,74 @@ export default function SalesPage() {
     if (!saleToReturn) return;
     const id = saleToReturn;
 
-    // Reverse stock before returning
-    const oldSale = sales.find(s => s.id === id);
-    if (oldSale && oldSale.items) {
-      for (const item of oldSale.items) {
-        if (!item.productId) continue;
-        const product = products.find(p => p.id === item.productId);
-        if (product) {
-          product.stock += item.quantity;
-          await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
-        }
-      }
-      setProducts([...products]);
+    if (!returnReason.trim()) {
+      return toast.warning("Please provide a reason for the return.");
     }
 
-    const { error } = await supabase.from('sales').delete().eq('id', id);
+    // Reverse stock and save returned_quantity based on selected return quantities
+    for (const item of returnItems) {
+      if (!item.productId || item.quantity <= 0) continue;
+      
+      // Update inventory stock
+      const product = products.find(p => p.id === item.productId);
+      if (product) {
+        product.stock += item.quantity;
+        const newStatus = Number(product.stock) > Number(product.minStock) ? "In Stock" : (Number(product.stock) <= 0 ? "Out of Stock" : "Low Stock");
+        await supabase.from("products").update({ current_stock: product.stock, status: newStatus }).eq("id", product.id);
+      }
+
+      // Update sale_items with returned_quantity
+      if (item.id) {
+        await supabase.from("sale_items").update({ returned_quantity: item.quantity }).eq("id", item.id);
+      }
+    }
+    setProducts([...products]);
+
+    const { error } = await supabase.from('sales').update({ payment_status: 'Returned', return_reason: returnReason }).eq('id', id);
     if (error) {
-      toast.error("Error returning sale: " + error.message);
+      if (error.message.includes('return_reason')) {
+         toast.error("Database error: Please run the SQL to add 'return_reason' column to the sales table!");
+      } else {
+         toast.error("Error returning sale: " + error.message);
+      }
       return;
     }
-    await deleteJournal(id);
-    setSales(sales.filter(s => s.id !== id));
+    
+    
+    const refundAmount = returnItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const sale = sales.find(s => s.id === id);
+    if (sale && sale.customerName !== 'Walk-in') {
+      const customer = customers.find(c => c.name === sale.customerName);
+      if (customer) {
+        const newBalance = (customer.balance || 0) - refundAmount;
+        await supabase.from('customers').update({ balance: newBalance }).eq('id', customer.id);
+      }
+    }
+    
+    // Use the new return journal instead of deleting the original sale completely
+    const customerId = sale ? customers.find(c => c.name === sale.customerName)?.id || null : null;
+    await recordSaleReturnJournal(id, refundAmount, customerId);
+
+    setSales(sales.map(s => s.id === id ? { ...s, paymentStatus: 'Returned' } : s));
     setSaleToReturn(null);
     toast.success("Sale returned successfully");
+    router.refresh();
   };
 
   const handleReturnSaleClick = (id: string) => {
-    setSaleToReturn(id);
+    const sale = sales.find(s => s.id === id);
+    if (sale) {
+      setReturnItems(sale.items.map((item: any) => ({
+        id: item.id,
+        productId: item.productId,
+        productName: item.productName,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity, // Set default return to max remaining
+        maxQuantity: item.quantity
+      })));
+      setReturnReason("");
+      setSaleToReturn(id);
+    }
   };
 
   const handleEditSaleStatus = (id: string, currentStatus: string) => {
@@ -178,6 +224,7 @@ export default function SalesPage() {
     setSales(sales.map(item => item.id === statusUpdateId ? { ...item, paymentStatus: finalStatus, paidAmount: newPaidAmount } : item));
     setStatusUpdateId(null);
     toast.success("Payment status updated");
+    router.refresh();
   };
 
   const handleAddToCart = () => {
@@ -280,7 +327,8 @@ export default function SalesPage() {
           const product = products.find(p => p.id === item.productId);
           if (product) {
             product.stock += item.quantity;
-            await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+          const newStatus = Number(product.stock) > Number(product.minStock) ? "In Stock" : (Number(product.stock) <= 0 ? "Out of Stock" : "Low Stock");
+          await supabase.from("products").update({ current_stock: product.stock, status: newStatus }).eq("id", product.id);
           }
         }
       }
@@ -346,7 +394,8 @@ export default function SalesPage() {
       const product = products.find(p => p.id === item.product.id);
       if (product) {
         product.stock -= item.quantity;
-        await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+        const newStatus = Number(product.stock) > Number(product.minStock) ? "In Stock" : (Number(product.stock) <= 0 ? "Out of Stock" : "Low Stock");
+        await supabase.from("products").update({ current_stock: product.stock, status: newStatus }).eq("id", product.id);
       }
     }
     setProducts([...products]);
@@ -381,7 +430,7 @@ export default function SalesPage() {
 
     setCartItems([]);
     setSelectedCustomer("");
-    setCustomerType("walkin");
+    /* removed walkin reset */
     setPaymentStatus("Paid");
     setPaymentMethod("cash");
     setDiscount(0);
@@ -389,7 +438,7 @@ export default function SalesPage() {
     setEditingId(null);
     setIsAddOpen(false);
     toast.success("Sale completed successfully!");
-    setSales([...sales]);
+    router.refresh();
   };
 
   if (isLoading || !dashboardData) {
@@ -432,6 +481,138 @@ export default function SalesPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+    const handlePrintInvoice = (sale: any) => {
+    const printContent = `
+      <html>
+        <head>
+          <title>Invoice #${sale.id}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            .header { display: flex; justify-content: space-between; margin-bottom: 30px; }
+            .title { font-size: 24px; font-weight: bold; }
+            .subtitle { color: #666; }
+            .table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            .table th, .table td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; }
+            .table th { background-color: #f8f9fa; }
+            .text-right { text-align: right; }
+            .totals { margin-top: 20px; width: 300px; float: right; }
+            .totals-row { display: flex; justify-content: space-between; padding: 5px 0; }
+            .bold { font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="title">INVOICE</div>
+              <div class="subtitle">#${sale.id}</div>
+            </div>
+            <div class="text-right">
+              <div class="bold">TechZone Computer Store</div>
+              <div class="subtitle">Rawalpindi, Pakistan</div>
+            </div>
+          </div>
+          <div style="margin-bottom: 20px;">
+            <div class="subtitle">Billed To:</div>
+            <div class="bold">{sale.customerName}</div>
+            <div class="subtitle">{sale.customerType}</div>
+          </div>
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th class="text-right">Price</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sale.items.map((item: any) => `
+                <tr>
+                  <td>{item.productName}</td>
+                  <td>{item.quantity}</td>
+                  <td class="text-right">{formatCurrency(item.unitPrice)}</td>
+                  <td class="text-right">{formatCurrency(item.amount)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div class="totals-row">
+              <span>Subtotal</span>
+              <span>{formatCurrency(sale.subtotal)}</span>
+            </div>
+            <div class="totals-row">
+              <span>Discount</span>
+              <span>-{formatCurrency(sale.discount)}</span>
+            </div>
+            <div class="totals-row bold" style="border-top: 1px solid #ddd; padding-top: 10px;">
+              <span>Total</span>
+              <span>{formatCurrency(sale.totalAmount)}</span>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    const printWindow = window.open('', '', 'width=800,height=600');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.close();
+    }
+  };
+
+  const handleDownloadInvoicePDF = (sale: any) => {
+    const doc = new jsPDF();
+    doc.setFontSize(20);
+    doc.text("INVOICE", 14, 22);
+    doc.setFontSize(10);
+    doc.text(`#${sale.id}`, 14, 30);
+    
+    doc.text("TechZone Computer Store", 140, 22);
+    doc.setTextColor(100);
+    doc.text("Rawalpindi, Pakistan", 140, 28);
+    
+    doc.setTextColor(0);
+    doc.text("Billed To:", 14, 45);
+    doc.setFontSize(12);
+    doc.text(sale.customerName || 'Walk-in', 14, 52);
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(sale.customerType || 'Retail', 14, 58);
+    
+    doc.setTextColor(0);
+    doc.text(`Date: ${formatDate(sale.date)}`, 140, 45);
+    doc.text(`Status: ${sale.paymentStatus}`, 140, 52);
+
+    autoTable(doc, {
+      startY: 70,
+      head: [["Item", "Qty", "Price", "Total"]],
+      body: sale.items.map((item: any) => [
+        item.productName,
+        item.quantity,
+        formatCurrency(item.unitPrice),
+        formatCurrency(item.amount)
+      ]),
+    });
+
+    const finalY = (doc as any).lastAutoTable?.finalY || 70;
+    
+    doc.text("Subtotal:", 140, finalY + 10);
+    doc.text(formatCurrency(sale.subtotal), 180, finalY + 10, { align: "right" });
+    
+    doc.text("Discount:", 140, finalY + 18);
+    doc.text(`-{formatCurrency(sale.discount)}`, 180, finalY + 18, { align: "right" });
+    
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Total:", 140, finalY + 28);
+    doc.text(formatCurrency(sale.totalAmount), 180, finalY + 28, { align: "right" });
+
+    doc.save(`Invoice_${sale.id}.pdf`);
   };
 
   const handleExportPDF = () => {
@@ -480,37 +661,21 @@ export default function SalesPage() {
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger render={<Button onClick={() => setEditingId(null)} />}>
               <Plus className="mr-2 h-4 w-4" />
-              New Sale (POS)
+              New Sale
             </DialogTrigger>
             <DialogContent className="sm:max-w-2xl overflow-y-auto max-h-[90vh] bg-white/95 backdrop-blur-xl border border-indigo-100 shadow-2xl rounded-2xl">
               <DialogHeader className="border-b border-indigo-50/50 pb-4 mb-4">
                 <DialogTitle className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-                  {editingId ? "Edit Sale Details" : "New Sale (Point of Sale)"}
+                  {editingId ? "Edit Sale Details" : "New Sale"}
                 </DialogTitle>
                 <DialogDescription className="text-indigo-600/70">
-                  {editingId ? "Modify an existing invoice." : "Create a new invoice for a walk-in or registered customer."}
+                  {editingId ? "Modify an existing invoice." : "Create a new invoice for a customer."}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-6 py-6">
-                <div className="space-y-2">
-                  <Label className="flex items-center text-base"><Users className="h-4 w-4 text-indigo-600 mr-2" /> Customer Type</Label>
-                  <Select value={customerType} onValueChange={(val) => {
-                    if (!val) return;
-                    setCustomerType(val);
-                    if (val === "walkin") setSelectedCustomer("");
-                  }}>
-                    <SelectTrigger className="h-11 text-base">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="walkin">Walk-in Customer</SelectItem>
-                      <SelectItem value="registered">Registered Customer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                
 
-                {customerType === 'registered' && (
-                  <div className="space-y-2">
+                <div className="space-y-2">
                     <Label className="flex items-center text-base"><User className="h-4 w-4 text-indigo-600 mr-2" /> Customer Name <span className="text-red-500 ml-1">*</span></Label>
                     <Select value={selectedCustomer} onValueChange={(val) => {
                       if (!val) return;
@@ -529,7 +694,6 @@ export default function SalesPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                )}
 
                 <div className="border-t pt-4 space-y-4">
                   <h4 className="font-medium text-base flex items-center"><Package className="h-4 w-4 text-indigo-600 mr-2" /> Add Products</h4>
@@ -787,81 +951,98 @@ export default function SalesPage() {
                           </Tooltip>
                         </div>
                       </TooltipProvider>
-                      <DialogContent className="max-w-2xl">
-                        <DialogHeader>
+                      <DialogContent className="sm:max-w-4xl w-[95vw] sm:w-[90vw] md:w-[80vw] lg:w-[70vw] bg-slate-50/95 backdrop-blur-xl border border-indigo-100 shadow-2xl rounded-2xl overflow-hidden p-0">
+                        <DialogHeader className="sr-only">
                           <DialogTitle>Invoice Details</DialogTitle>
-                          <DialogDescription>
-                            Invoice {sale.id} generated on {formatDate(sale.date)}
-                          </DialogDescription>
+                          <DialogDescription>Invoice {sale.id} generated on {formatDate(sale.date)}</DialogDescription>
                         </DialogHeader>
-                        <div className="bg-white p-6 border rounded-lg shadow-sm mt-4">
-                          <div className="flex justify-between items-start mb-8">
-                            <div>
-                              <h3 className="font-bold text-2xl text-slate-800">INVOICE</h3>
-                              <p className="text-slate-500 text-sm mt-1">#{sale.id}</p>
-                            </div>
-                            <div className="text-right text-sm">
-                              <p className="font-bold">TechZone Computer Store</p>
-                              <p className="text-slate-500">Rawalpindi, Pakistan</p>
-                            </div>
+                        
+                        <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-8 text-white relative overflow-hidden">
+                          <div className="absolute top-0 right-0 opacity-10 transform translate-x-1/4 -translate-y-1/4">
+                            <svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <circle cx="100" cy="100" r="100" fill="currentColor"/>
+                            </svg>
                           </div>
-
-                          <div className="flex justify-between items-end border-b pb-4 mb-6">
-                            <div className="text-sm">
-                              <p className="text-slate-500 mb-1">Billed To:</p>
-                              <p className="font-bold">{sale.customerName}</p>
-                              <p className="text-slate-500">{sale.customerType}</p>
+                          <div className="flex justify-between items-start relative z-10">
+                            <div>
+                              <h2 className="text-4xl font-black tracking-tight">INVOICE</h2>
+                              <p className="text-indigo-200 mt-1 font-medium tracking-widest text-sm uppercase">#{sale.id}</p>
                             </div>
                             <div className="text-right">
-                              <Badge className={
-                                sale.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-700' :
+                              <h3 className="font-bold text-xl mb-1">TechZone Computer Store</h3>
+                              <p className="text-indigo-100 text-sm opacity-90">Rawalpindi, Pakistan</p>
+                              <p className="text-indigo-100 text-sm mt-2 font-medium opacity-90">Date: {formatDate(sale.date)}</p>
+                            </div>
+                          </div>
+                        </div>
 
-                                  'bg-red-100 text-red-700'
+                        <div className="p-8 bg-white">
+                          <div className="flex justify-between items-end border-b border-slate-100 pb-6 mb-8">
+                            <div>
+                              <p className="text-xs font-bold tracking-widest text-slate-400 uppercase mb-2">Billed To</p>
+                              <p className="text-xl font-bold text-slate-800">{sale.customerName}</p>
+                              <p className="text-sm text-slate-500 font-medium">{sale.customerType}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-bold tracking-widest text-slate-400 uppercase mb-2">Payment Status</p>
+                              <Badge className={
+                                sale.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-emerald-200 px-4 py-1.5 text-sm font-bold shadow-sm' :
+                                'bg-red-100 text-red-700 hover:bg-red-200 border-red-200 px-4 py-1.5 text-sm font-bold shadow-sm'
                               }>{sale.paymentStatus}</Badge>
                             </div>
                           </div>
 
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Item</TableHead>
-                                <TableHead className="text-center">Qty</TableHead>
-                                <TableHead className="text-right">Price</TableHead>
-                                <TableHead className="text-right">Total</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {sale.items.map((item: any, idx: number) => (
-                                <TableRow key={idx}>
-                                  <TableCell>{item.productName}</TableCell>
-                                  <TableCell className="text-center">{item.quantity}</TableCell>
-                                  <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
-                                  <TableCell className="text-right font-medium">{formatCurrency(item.amount)}</TableCell>
+                          <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm mb-8">
+                            <Table>
+                              <TableHeader className="bg-slate-50 border-b border-slate-200">
+                                <TableRow className="hover:bg-transparent">
+                                  <TableHead className="text-slate-600 font-bold py-4 uppercase text-xs tracking-wider">Item Description</TableHead>
+                                  <TableHead className="text-center text-slate-600 font-bold py-4 uppercase text-xs tracking-wider">Qty</TableHead>
+                                  <TableHead className="text-right text-slate-600 font-bold py-4 uppercase text-xs tracking-wider">Unit Price</TableHead>
+                                  <TableHead className="text-right text-slate-600 font-bold py-4 uppercase text-xs tracking-wider">Total Amount</TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {sale.items.map((item: any, idx: number) => (
+                                  <TableRow key={idx} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                                    <TableCell className="font-semibold text-slate-800 py-4">{item.productName}</TableCell>
+                                    <TableCell className="text-center text-slate-600 font-medium py-4">
+                                      <Badge variant="outline" className="bg-slate-50 font-semibold">{item.quantity}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right text-slate-600 font-medium py-4">{formatCurrency(item.unitPrice)}</TableCell>
+                                    <TableCell className="text-right font-bold text-slate-900 py-4">{formatCurrency(item.amount)}</TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
 
-                          <div className="flex justify-end mt-6">
-                            <div className="w-64 space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Subtotal</span>
-                                <span>{formatCurrency(sale.subtotal)}</span>
-                              </div>
-                              <div className="flex justify-between text-sm">
-                                <span className="text-slate-500">Discount</span>
-                                <span>-{formatCurrency(sale.discount)}</span>
-                              </div>
-                              <div className="flex justify-between font-bold text-lg pt-2 border-t">
-                                <span>Total</span>
-                                <span>{formatCurrency(sale.totalAmount)}</span>
+                          <div className="flex justify-end mb-8">
+                            <div className="w-80 bg-slate-50 rounded-2xl p-6 border border-slate-200 shadow-inner">
+                              <div className="space-y-4">
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-500 font-semibold uppercase tracking-wider text-xs">Subtotal</span>
+                                  <span className="font-semibold text-slate-700">{formatCurrency(sale.subtotal)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                  <span className="text-slate-500 font-semibold uppercase tracking-wider text-xs">Discount</span>
+                                  <span className="font-semibold text-emerald-600">-{formatCurrency(sale.discount)}</span>
+                                </div>
+                                <div className="flex justify-between font-black text-2xl pt-5 border-t-2 border-slate-200 mt-2 text-indigo-950">
+                                  <span>Total</span>
+                                  <span>{formatCurrency(sale.totalAmount)}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
 
-                          <div className="mt-8 flex justify-end gap-2">
-                            <Button variant="outline"><Printer className="h-4 w-4 mr-2" /> Print</Button>
-                            <Button><Download className="h-4 w-4 mr-2" /> Download PDF</Button>
+                          <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                            <Button variant="outline" className="border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold px-6" onClick={() => handlePrintInvoice(sale)}>
+                              <Printer className="h-4 w-4 mr-2" /> Print Invoice
+                            </Button>
+                            <Button className="bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-lg font-semibold px-6 border-none" onClick={() => handleDownloadInvoicePDF(sale)}>
+                              <Download className="h-4 w-4 mr-2" /> Download PDF
+                            </Button>
                           </div>
                         </div>
                       </DialogContent>
@@ -905,16 +1086,76 @@ export default function SalesPage() {
 
       {/* Return Sale Dialog */}
       <Dialog open={!!saleToReturn} onOpenChange={(open) => !open && setSaleToReturn(null)}>
-        <DialogContent className="sm:max-w-md bg-white/95 backdrop-blur-xl border border-red-100 shadow-2xl rounded-2xl">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur-xl border border-red-100 shadow-2xl rounded-2xl">
           <DialogHeader className="border-b border-red-50/50 pb-4 mb-4">
-            <DialogTitle className="text-xl font-bold text-red-600">Confirm Return</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-red-600">Manage Return</DialogTitle>
             <DialogDescription className="pt-2 text-slate-600">
-              Are you sure you want to return this sale? This action will remove the transaction and restore stock to your inventory.
+              Select the quantities to return and provide a reason. Stock will be restored to your inventory.
             </DialogDescription>
           </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            <div className="rounded-md border border-slate-200 overflow-hidden">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="text-center">Price</TableHead>
+                    <TableHead className="text-center">Return Qty</TableHead>
+                    <TableHead className="text-right">Refund Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {returnItems.map((item, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-medium">{item.productName}</TableCell>
+                      <TableCell className="text-center">{formatCurrency(item.unitPrice)}</TableCell>
+                      <TableCell className="text-center">
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          max={item.maxQuantity} 
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const val = Math.min(Math.max(0, parseInt(e.target.value) || 0), item.maxQuantity);
+                            const newItems = [...returnItems];
+                            newItems[idx].quantity = val;
+                            setReturnItems(newItems);
+                          }}
+                          className="w-20 mx-auto text-center"
+                        />
+                        <div className="text-xs text-slate-400 mt-1">Max: {item.maxQuantity}</div>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-red-600">
+                        {formatCurrency(item.quantity * item.unitPrice)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            
+            <div className="flex justify-end items-center gap-4 py-2 bg-slate-50 px-4 rounded-md border border-slate-100">
+              <span className="font-semibold text-slate-600">Total Refund Amount:</span>
+              <span className="text-2xl font-black text-red-600">
+                {formatCurrency(returnItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
+              </span>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <Label htmlFor="returnReason" className="font-semibold text-slate-700">Reason for Return <span className="text-red-500">*</span></Label>
+              <Input 
+                id="returnReason"
+                placeholder="E.g. Defective item, customer changed mind..." 
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+              />
+            </div>
+          </div>
+
           <DialogFooter className="mt-4 border-t border-red-50/50 pt-4 flex gap-2 justify-end">
             <Button variant="outline" onClick={() => setSaleToReturn(null)}>Cancel</Button>
-            <Button variant="destructive" className="bg-red-600 hover:bg-red-700 text-white" onClick={confirmReturnSale}>Return Sale</Button>
+            <Button variant="destructive" className="bg-red-600 hover:bg-red-700 text-white" onClick={confirmReturnSale}>Confirm Return</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

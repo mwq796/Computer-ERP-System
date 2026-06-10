@@ -1,13 +1,15 @@
 "use client";
 import { toast } from "react-toastify";
 
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { recordPurchaseJournal, deleteJournal } from "../accounting-actions";
+import { recordPurchaseJournal, deleteJournal, recordPurchaseReturnJournal } from "../accounting-actions";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Download, Filter, ShoppingBag, Truck, DollarSign, MoreHorizontal, Search, Users, Package, Eye, Edit, CheckCircle, Trash2 } from "lucide-react";
+import { Plus, Download, Filter, ShoppingBag, Truck, DollarSign, MoreHorizontal, Search, Users, Package, Eye, Edit, CheckCircle, Trash2, Undo2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -22,7 +24,8 @@ export default function PurchasesPage() {
   const [selectedProduct, setSelectedProduct] = useState("");
   const [selectedSupplier, setSelectedSupplier] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState("Unpaid");
+  const [referenceNumber, setReferenceNumber] = useState<string>("");
+  const [paymentStatus, setPaymentStatus] = useState("Paid");
   const [discount, setDiscount] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -35,7 +38,26 @@ export default function PurchasesPage() {
   const [statusUpdateId, setStatusUpdateId] = useState<string | null>(null);
   const [newStatusValue, setNewStatusValue] = useState<string>('Paid');
   const [newStatusAmount, setNewStatusAmount] = useState<number | string>('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [returnItems, setReturnItems] = useState<any[]>([]);
+  const [returnReason, setReturnReason] = useState("");
+  const handleDeletePurchase = (id: string) => {
+    const purchase = purchases.find(p => p.id === id);
+    if (purchase && purchase.items) {
+      setReturnItems(purchase.items.map((item: any) => ({
+        id: item.id,
+        productId: item.productId || item.product_id, 
+        productName: item.productName || item.products?.name,
+        unitCost: item.unitCost || item.unit_price || 0, 
+        quantity: item.quantity, 
+        maxQuantity: item.quantity
+      })));
+      setReturnReason("");
+      setDeleteConfirmId(id);
+    }
+  };
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     async function loadData() {
@@ -48,10 +70,7 @@ export default function PurchasesPage() {
       if (purchasesRes.data) setPurchases(purchasesRes.data.map(p => {
         let pStatus = p.payment_status;
         let pAmount = 0;
-        if (pStatus?.startsWith('Partial Paid:')) {
-          pAmount = parseFloat(pStatus.split(': ')[1]) || 0;
-          pStatus = 'Partial Paid';
-        } else if (pStatus === 'Paid') {
+        if (pStatus === 'Paid') {
           pAmount = p.total_amount;
         }
         
@@ -78,7 +97,8 @@ export default function PurchasesPage() {
         name: p.name,
         sellingPrice: p.selling_price,
         purchasePrice: p.purchase_price,
-        stock: p.current_stock || 0
+        stock: p.current_stock || 0,
+        minStock: p.min_stock || 0
       })));
       if (suppliersRes.data) setSuppliers(suppliersRes.data);
       
@@ -87,21 +107,22 @@ export default function PurchasesPage() {
     loadData();
   }, []);
 
-  const handleDeletePurchase = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this purchase order?")) return;
+  const executeDelete = async (id: string) => {
 
     const purchase = purchases.find(p => p.id === id);
-    if (purchase) {
-      const remainingBalance = purchase.totalAmount - (purchase.paidAmount || 0);
-      if (remainingBalance > 0 && purchase.supplierName && purchase.supplierName !== 'Unknown Supplier') {
-        const supplier = suppliers.find(s => s.name === purchase.supplierName);
-        if (supplier) {
-          const newBalance = (supplier.balance || 0) - remainingBalance;
-          await supabase.from('suppliers').update({ balance: newBalance }).eq('id', supplier.id);
-          setSuppliers(suppliers.map(s => s.id === supplier.id ? { ...s, balance: newBalance } : s));
-        }
+    
+    const refundAmount = returnItems.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0);
+    if (purchase && purchase.supplierName && purchase.supplierName !== 'Unknown Supplier') {
+      const supplier = suppliers.find(s => s.name === purchase.supplierName);
+      if (supplier) {
+        const newBalance = (supplier.balance || 0) - refundAmount;
+        // We do not decrease total_orders because total_orders represents historical volume, not current outstanding, 
+        // but if desired, we could reduce it. Let's just adjust balance.
+        await supabase.from('suppliers').update({ balance: newBalance }).eq('id', supplier.id);
+        setSuppliers(suppliers.map(s => s.id === supplier.id ? { ...s, balance: newBalance } : s));
       }
     }
+
 
     const { data: oldItems } = await supabase.from('purchase_items').select('*').eq('purchase_id', id);
     if (oldItems) {
@@ -110,20 +131,25 @@ export default function PurchasesPage() {
         const product = products.find(p => p.id === item.product_id);
         if (product) {
           product.stock -= item.quantity;
-          await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+          const newStatus = Number(product.stock) > Number(product.minStock) ? "In Stock" : (Number(product.stock) <= 0 ? "Out of Stock" : "Low Stock");
+          await supabase.from('products').update({ current_stock: product.stock, status: newStatus }).eq('id', product.id);
         }
       }
       setProducts([...products]);
     }
 
-    const { error } = await supabase.from('purchases').delete().eq('id', id);
+    const { error } = await supabase.from('purchases').update({ payment_status: 'Returned' }).eq('id', id);
     if (error) {
       toast.error("Error deleting purchase: " + error.message);
       return;
     }
-    await deleteJournal(id);
-    setPurchases(purchases.filter(p => p.id !== id));
-    toast.success("Purchase deleted successfully");
+    
+    const supplierId = purchase ? suppliers.find(s => s.name === purchase.supplierName)?.id || null : null;
+    await recordPurchaseReturnJournal(id, refundAmount, supplierId);
+
+    setPurchases(purchases.map(p => p.id === id ? { ...p, paymentStatus: 'Returned' } : p));
+    toast.success("Purchase returned successfully");
+    router.refresh();
   };
 
   const handleEditPurchaseStatus = (id: string, currentStatus: string) => {
@@ -172,8 +198,56 @@ export default function PurchasesPage() {
     setPurchases(purchases.map(item => item.id === statusUpdateId ? { ...item, paymentStatus: finalStatus, paidAmount: newPaidAmount } : item));
     setStatusUpdateId(null);
     toast.success("Payment status updated");
+    router.refresh();
   };
   
+  
+  const handleExportCSV = () => {
+    const headers = ['Purchase ID', 'Date', 'Supplier', 'Amount', 'Status'];
+    const csvContent = [
+      headers.join(','),
+      ...purchases.map(p => 
+        [p.id, p.date, p.supplierName, p.totalAmount, p.paymentStatus].map(v => '"' + v + '"').join(',')
+      )
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `purchases_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportPDF = () => {
+    import('jspdf').then(({ default: jsPDF }) => {
+      import('jspdf-autotable').then(() => {
+        const doc = new jsPDF();
+        doc.text("Purchases Report", 14, 15);
+        
+        const tableColumn = ["Purchase ID", "Date", "Supplier", "Amount", "Status"];
+        const tableRows = purchases.map(p => [
+          p.id,
+          new Date(p.date).toLocaleDateString(),
+          p.supplierName,
+          p.totalAmount.toString(),
+          p.paymentStatus
+        ]);
+
+        (doc as any).autoTable({
+          head: [tableColumn],
+          body: tableRows,
+          startY: 20,
+        });
+
+        doc.save(`purchases_export_${new Date().toISOString().split('T')[0]}.pdf`);
+      });
+    });
+  };
+
   const handleProductSelect = (val: string) => {
     setSelectedProduct(val);
     const product = products.find(p => p.id === val);
@@ -202,6 +276,7 @@ export default function PurchasesPage() {
 
   const handleEditPurchase = (purchase: any) => {
     setEditingId(purchase.id);
+    setReferenceNumber(purchase.id);
     const supplier = suppliers.find(s => s.name === purchase.supplierName);
     setSelectedSupplier(supplier?.id || "");
     setPaymentStatus(purchase.paymentStatus);
@@ -243,9 +318,7 @@ export default function PurchasesPage() {
     if (paymentStatus === 'Unpaid') finalPaidAmount = 0;
 
     let finalStatus = paymentStatus;
-    if (paymentStatus === 'Partial Paid') {
-      finalStatus = `Partial Paid: ${finalPaidAmount}`;
-    }
+    
 
     const date = new Date().toISOString();
 
@@ -267,12 +340,14 @@ export default function PurchasesPage() {
       const { error: purchaseError } = await supabase.from('purchases').update(dbPurchase).eq('id', editingId);
       if (purchaseError) return alert("Error updating purchase order: " + purchaseError.message);
 
-      if (remainingBalance !== oldRemaining) {
-        const supplier = suppliers.find(s => s.id === selectedSupplier);
-        if (supplier) {
-          await supabase.from('suppliers').update({ balance: (supplier.balance || 0) - oldRemaining + remainingBalance }).eq('id', selectedSupplier);
-          supplier.balance = (supplier.balance || 0) - oldRemaining + remainingBalance;
-        }
+            const supplier = suppliers.find(s => s.id === selectedSupplier);
+      if (supplier) {
+        const oldPurchaseAmount = oldPurchase ? oldPurchase.totalAmount : 0;
+        const newTotalOrders = (supplier.total_orders || 0) - oldPurchaseAmount + totalAmount;
+        const newBalance = (supplier.balance || 0) - oldRemaining + remainingBalance;
+        await supabase.from('suppliers').update({ balance: newBalance, total_orders: newTotalOrders }).eq('id', selectedSupplier);
+        supplier.balance = newBalance;
+        supplier.total_orders = newTotalOrders;
       }
 
       // Reverse previous stock
@@ -283,26 +358,28 @@ export default function PurchasesPage() {
           const product = products.find(p => p.id === item.product_id);
           if (product) {
             product.stock -= item.quantity;
-            await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+          const newStatus = Number(product.stock) > Number(product.minStock) ? "In Stock" : (Number(product.stock) <= 0 ? "Out of Stock" : "Low Stock");
+          await supabase.from('products').update({ current_stock: product.stock, status: newStatus }).eq('id', product.id);
           }
         }
       }
 
       await supabase.from('purchase_items').delete().eq('purchase_id', editingId);
     } else {
-      activePurchaseId = `PO-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+      activePurchaseId = referenceNumber || `PO-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
       dbPurchase.id = activePurchaseId;
       dbPurchase.date = date;
 
       const { error: purchaseError } = await supabase.from('purchases').insert([dbPurchase]);
       if (purchaseError) return alert("Error saving purchase order: " + purchaseError.message);
 
-      if (remainingBalance > 0) {
-        const supplier = suppliers.find(s => s.id === selectedSupplier);
-        if (supplier) {
-          await supabase.from('suppliers').update({ balance: (supplier.balance || 0) + remainingBalance }).eq('id', selectedSupplier);
-          supplier.balance = (supplier.balance || 0) + remainingBalance;
-        }
+            const supplier = suppliers.find(s => s.id === selectedSupplier);
+      if (supplier) {
+        const newTotalOrders = (supplier.total_orders || 0) + totalAmount;
+        const newBalance = (supplier.balance || 0) + remainingBalance;
+        await supabase.from('suppliers').update({ balance: newBalance, total_orders: newTotalOrders }).eq('id', selectedSupplier);
+        supplier.balance = newBalance;
+        supplier.total_orders = newTotalOrders;
       }
     }
 
@@ -320,8 +397,9 @@ export default function PurchasesPage() {
     for (const item of cartItems) {
       const product = products.find(p => p.id === item.product.id);
       if (product) {
-        product.stock += item.quantity;
-        await supabase.from('products').update({ current_stock: product.stock }).eq('id', product.id);
+        product.stock = Number(product.stock) + Number(item.quantity);
+        const newStatus = Number(product.stock) > Number(product.minStock) ? "In Stock" : (Number(product.stock) <= 0 ? "Out of Stock" : "Low Stock");
+        await supabase.from('products').update({ current_stock: product.stock, status: newStatus }).eq('id', product.id);
       }
     }
     setProducts([...products]);
@@ -359,6 +437,8 @@ export default function PurchasesPage() {
     setPaidAmount(0);
     setEditingId(null);
     setIsAddOpen(false);
+    toast.success("Purchase order saved successfully!");
+    router.refresh();
   };
 
   if (isLoading) {
@@ -398,10 +478,13 @@ export default function PurchasesPage() {
           <p className="text-muted-foreground">Manage supplier purchases, track spending, and restock inventory.</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline"><Download className="mr-2 h-4 w-4" />Export</Button>} />
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportCSV}>Export as Excel (CSV)</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPDF}>Export as PDF</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           
           <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
             <DialogTrigger render={<Button onClick={() => setEditingId(null)} />}>
@@ -434,7 +517,20 @@ export default function PurchasesPage() {
                 
                 <div className="space-y-2">
                   <Label>Purchase Reference / Bill No.</Label>
-                  <Input placeholder="Enter bill or reference number" />
+                  <div className="flex gap-2">
+                    <Input 
+                      placeholder="Enter bill or reference number" 
+                      value={referenceNumber}
+                      onChange={(e) => setReferenceNumber(e.target.value)}
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setReferenceNumber(`PO-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`)}
+                    >
+                      Auto
+                    </Button>
+                  </div>
                 </div>
                 
                 <div className="border-t pt-4 space-y-4">
@@ -520,7 +616,7 @@ export default function PurchasesPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Paid">Paid in Full</SelectItem>
-                      <SelectItem value="Partial Paid">Partial Paid</SelectItem>
+                      
                       <SelectItem value="Unpaid">Unpaid / On Credit</SelectItem>
                     </SelectContent>
                   </Select>
@@ -632,13 +728,13 @@ export default function PurchasesPage() {
                     {formatCurrency(purchase.totalAmount)}
                   </TableCell>
                   <TableCell className="text-right text-orange-600 font-medium">
-                    {purchase.paymentStatus === 'Partial Paid' ? formatCurrency(purchase.totalAmount - purchase.paidAmount) : 
+                    { 
                      purchase.paymentStatus === 'Unpaid' ? formatCurrency(purchase.totalAmount) : '—'}
                   </TableCell>
                   <TableCell className="text-center">
                     <Badge variant={purchase.paymentStatus === 'Paid' ? 'default' : 'destructive'} 
                            className={purchase.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100' : 
-                                      purchase.paymentStatus === 'Partial Paid' ? 'bg-orange-100 text-orange-700 hover:bg-orange-100' : ''}>
+                                       ''}>
                       {purchase.paymentStatus}
                     </Badge>
                   </TableCell>
@@ -670,10 +766,10 @@ export default function PurchasesPage() {
                           </Tooltip>
 
                           <Tooltip>
-                            <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:text-red-800 hover:bg-red-50" onClick={() => handleDeletePurchase(purchase.id)} />}>
-                              <Trash2 className="h-4 w-4" />
+                            <TooltipTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-orange-600 hover:text-orange-800 hover:bg-orange-50" onClick={() => handleDeletePurchase(purchase.id)} />}>
+                              <Undo2 className="h-4 w-4" />
                             </TooltipTrigger>
-                            <TooltipContent>Delete Order</TooltipContent>
+                            <TooltipContent>Return Order</TooltipContent>
                           </Tooltip>
                         </div>
                       </TooltipProvider>
@@ -743,6 +839,81 @@ export default function PurchasesPage() {
           <DialogFooter className="mt-6 border-t border-indigo-50/50 pt-4">
             <Button variant="outline" onClick={() => setStatusUpdateId(null)}>Cancel</Button>
             <Button onClick={submitStatusUpdate}>Update Status</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    
+      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-white/95 backdrop-blur-xl border border-red-100 shadow-2xl rounded-2xl">
+          <DialogHeader className="border-b border-red-50/50 pb-4 mb-4">
+            <DialogTitle className="text-xl font-bold text-red-600">Manage Purchase Return</DialogTitle>
+            <DialogDescription className="pt-2 text-slate-600">
+              Select the quantities to return to the supplier and provide a reason. Stock will be deducted from your inventory.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-2">
+            <div className="rounded-md border border-slate-200 overflow-hidden">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead className="text-center">Cost</TableHead>
+                    <TableHead className="text-center">Return Qty</TableHead>
+                    <TableHead className="text-right">Refund Amount</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {returnItems.map((item, idx) => (
+                    <TableRow key={idx}>
+                      <TableCell className="font-medium">{item.productName}</TableCell>
+                      <TableCell className="text-center">{formatCurrency(item.unitCost)}</TableCell>
+                      <TableCell className="text-center">
+                        <Input 
+                          type="number" 
+                          min="0" 
+                          max={item.maxQuantity} 
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const val = Math.min(Math.max(0, parseInt(e.target.value) || 0), item.maxQuantity);
+                            const newItems = [...returnItems];
+                            newItems[idx].quantity = val;
+                            setReturnItems(newItems);
+                          }}
+                          className="w-20 mx-auto text-center"
+                        />
+                        <div className="text-xs text-slate-400 mt-1">Max: {item.maxQuantity}</div>
+                      </TableCell>
+                      <TableCell className="text-right font-bold text-red-600">
+                        {formatCurrency(item.quantity * item.unitCost)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            
+            <div className="flex justify-end items-center gap-4 py-2 bg-slate-50 px-4 rounded-md border border-slate-100">
+              <span className="font-semibold text-slate-600">Total Refund Claim:</span>
+              <span className="text-2xl font-black text-red-600">
+                {formatCurrency(returnItems.reduce((sum, item) => sum + (item.quantity * item.unitCost), 0))}
+              </span>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <Label htmlFor="purchaseReturnReason" className="font-semibold text-slate-700">Reason for Return <span className="text-red-500">*</span></Label>
+              <Input 
+                id="purchaseReturnReason"
+                placeholder="E.g. Defective batch, wrong items delivered..." 
+                value={returnReason}
+                onChange={(e) => setReturnReason(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="mt-4 border-t border-red-50/50 pt-4 flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Cancel</Button>
+            <Button variant="destructive" className="bg-red-600 hover:bg-red-700 text-white" onClick={() => executeDelete(deleteConfirmId!)}>Confirm Return</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

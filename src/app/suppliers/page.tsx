@@ -1,9 +1,11 @@
 "use client";
 import { toast } from "react-toastify";
 
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Truck, Search, Plus, MoreHorizontal, FileText, Edit, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -17,7 +19,10 @@ export default function SuppliersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const handleDeleteSupplier = (id: string) => setDeleteConfirmId(id);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     async function fetchSuppliers() {
@@ -85,18 +90,20 @@ export default function SuppliersPage() {
     setIsAddOpen(true);
   };
 
-  const handleDeleteSupplier = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this supplier?")) return;
+  const executeDelete = async (id: string) => {
     const { error } = await supabase.from('suppliers').delete().eq('id', id);
     if (error) {
-      alert("Error deleting supplier: " + error.message);
+      toast.error("Error deleting supplier: " + error.message);
       return;
     }
     setSuppliers(suppliers.filter(s => s.id !== id));
+    toast.success("Supplier deleted successfully!");
+    router.refresh();
   };
 
   const handleSaveSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name.trim()) return toast.warning("Supplier name is required.");
     
     if (editingSupplier) {
       const dbSupplier = {
@@ -108,7 +115,7 @@ export default function SuppliersPage() {
       const { error } = await supabase.from('suppliers').update(dbSupplier).eq('id', editingSupplier.id);
       
       if (error) {
-        alert("Error updating supplier: " + error.message);
+        toast.error("Error updating supplier: " + error.message);
         return;
       }
       
@@ -117,6 +124,8 @@ export default function SuppliersPage() {
           ? { ...s, name: formData.name, contactPerson: formData.contactPerson, phone: formData.phone } 
           : s
       ));
+      toast.success("Supplier updated successfully!");
+    router.refresh();
     } else {
       const newId = `S${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
       
@@ -132,7 +141,7 @@ export default function SuppliersPage() {
       const { error } = await supabase.from('suppliers').insert([dbSupplier]);
       
       if (error) {
-        alert("Error adding supplier: " + error.message);
+        toast.error("Error adding supplier: " + error.message);
         return;
       }
 
@@ -146,6 +155,8 @@ export default function SuppliersPage() {
       };
       
       setSuppliers([newSupplier, ...suppliers]);
+      toast.success("Supplier added successfully!");
+    router.refresh();
     }
     
     setIsAddOpen(false);
@@ -364,6 +375,14 @@ export default function SuppliersPage() {
           </Table>
         </div>
       </div>
+    
+      <ConfirmModal 
+        isOpen={!!deleteConfirmId} 
+        onClose={() => setDeleteConfirmId(null)} 
+        onConfirm={() => deleteConfirmId && executeDelete(deleteConfirmId)} 
+        title="Confirm Deletion" 
+        description="Are you sure you want to delete this supplier? This action cannot be undone." 
+      />
     </div>
   );
 }

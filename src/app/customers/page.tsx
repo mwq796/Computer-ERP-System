@@ -1,9 +1,11 @@
 "use client";
 import { toast } from "react-toastify";
 
+import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
+import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, UserCheck, MoreHorizontal, FileText, Edit, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -17,7 +19,10 @@ export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [customers, setCustomers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const handleDeleteCustomer = (id: string) => setDeleteConfirmId(id);
   const supabase = createClient();
+  const router = useRouter();
 
   useEffect(() => {
     async function fetchCustomers() {
@@ -86,18 +91,21 @@ export default function CustomersPage() {
     setIsAddOpen(true);
   };
 
-  const handleDeleteCustomer = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this customer?")) return;
+  const executeDelete = async (id: string) => {
     const { error } = await supabase.from('customers').delete().eq('id', id);
     if (error) {
       toast.error("Error deleting customer: " + error.message);
       return;
     }
     setCustomers(customers.filter(c => c.id !== id));
+    toast.success("Customer deleted successfully!");
+    router.refresh();
   };
 
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name.trim()) return toast.warning("Customer name is required.");
+    if (!formData.phone.trim()) return toast.warning("Customer phone is required.");
 
     if (editingCustomer) {
       const dbCustomer = {
@@ -119,6 +127,8 @@ export default function CustomersPage() {
           ? { ...c, ...formData }
           : c
       ));
+      toast.success("Customer updated successfully!");
+    router.refresh();
     } else {
       const newId = `C${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
       const dbCustomer = {
@@ -144,6 +154,8 @@ export default function CustomersPage() {
       };
 
       setCustomers([newCustomer, ...customers]);
+      toast.success("Customer added successfully!");
+    router.refresh();
     }
 
     setIsAddOpen(false);
@@ -191,11 +203,11 @@ export default function CustomersPage() {
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="name" className="text-right">Name</Label>
+                  <Label htmlFor="name" className="text-right">Name <span className="text-red-500">*</span></Label>
                   <Input id="name" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="col-span-3" required />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="phone" className="text-right">Phone</Label>
+                  <Label htmlFor="phone" className="text-right">Phone <span className="text-red-500">*</span></Label>
                   <Input id="phone" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="col-span-3" required />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
@@ -364,6 +376,14 @@ export default function CustomersPage() {
           </Table>
         </div>
       </div>
+    
+      <ConfirmModal 
+        isOpen={!!deleteConfirmId} 
+        onClose={() => setDeleteConfirmId(null)} 
+        onConfirm={() => deleteConfirmId && executeDelete(deleteConfirmId)} 
+        title="Confirm Deletion" 
+        description="Are you sure you want to delete this customer? This action cannot be undone." 
+      />
     </div>
   );
 }

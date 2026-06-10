@@ -10,7 +10,7 @@ export async function fetchDashboardData() {
   const { data: sales } = await supabase.from('sales').select('*, customers(name)');
   const { data: purchases } = await supabase.from('purchases').select('*, suppliers(name)');
   const { data: products } = await supabase.from('products').select('*');
-  const { data: saleItems } = await supabase.from('sale_items').select('*, products(name)');
+  const { data: saleItems } = await supabase.from('sale_items').select('*, products(name), sales(payment_status)');
   const { data: expenses } = await supabase.from('expenses').select('*');
 
   // Basic calculations (Mocking some complex logic for demo speed)
@@ -38,7 +38,7 @@ export async function fetchDashboardData() {
     supplierPayables = suppliersData.reduce((sum, s) => sum + (s.balance || 0), 0);
   }
 
-  const outOfStockProducts = products?.filter(p => p.current_stock === 0).length || 0;
+  const outOfStockProducts = products?.filter(p => p.current_stock <= 0).length || 0;
   const lowStockProducts = products?.filter(p => p.current_stock > 0 && p.current_stock <= p.min_stock).length || 0;
 
   const recentSales = sales?.slice(0, 5).map(s => ({
