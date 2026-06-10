@@ -3,12 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 
 // We use the admin client to bypass any potential RLS if it was turned on,
 // and to ensure we have full access during the migration.
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || ''; // Usually we need a service role key for migrations, but we'll try with this since RLS is disabled
 
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+  const supabase = createClient(supabaseUrl, supabaseKey);
   try {
     console.log("Starting Accounting Migration...");
 
