@@ -218,7 +218,7 @@ export default function ProductsPage() {
         </div>
         <div className="flex items-center gap-2">
           <div className="flex gap-2">
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <Select value={categoryFilter} onValueChange={(val) => val && setCategoryFilter(val)}>
               <SelectTrigger className="w-[160px] bg-white border-indigo-100">
                 <Filter className="mr-2 h-4 w-4 text-indigo-500" />
                 <SelectValue placeholder="Category" />
@@ -231,7 +231,7 @@ export default function ProductsPage() {
               </SelectContent>
             </Select>
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <Select value={statusFilter} onValueChange={(val) => val && setStatusFilter(val)}>
               <SelectTrigger className="w-[160px] bg-white border-indigo-100">
                 <Filter className="mr-2 h-4 w-4 text-indigo-500" />
                 <SelectValue placeholder="Status" />
